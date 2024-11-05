@@ -2,20 +2,33 @@ package main
 
 import (
 	"log"
+	"os"
+
+	"github.com/joho/godotenv"
+	"github.com/maxolivera/gophis-social-network/internal/handlers"
 )
 
 func main() {
-	// Set server configuration
+	// Get env values
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalln("error loading .env file:", err)
+	}
 
-	cfg := config{
-		addr: ":8080",
+	addr := os.Getenv("ADDR")
+	if addr == "" {
+		log.Fatalln("could not find ADDR environment value")
+	}
+	log.Println("using %s as ADDR", addr)
+
+	// Set handlers configuration
+	cfg := handlers.ApiConfig{
+		Addr: addr,
 	}
 
 	app := &application{
-		config: cfg,
+		api: &cfg,
 	}
 
-	log.Fatalln(
-		app.start(app.setHandlers()),
-	)
+	log.Fatalln(app.start())
 }

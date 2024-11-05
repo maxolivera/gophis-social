@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func (app *application) handlerHealthz(w http.ResponseWriter, r *http.Request) {
+func (cfg *ApiConfig) handlerHealthz(w http.ResponseWriter, r *http.Request) {
 	type response struct {
 		Status string `json:"status"`
 	}
