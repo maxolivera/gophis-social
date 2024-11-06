@@ -57,6 +57,8 @@ func (app *Application) GetHandlers() http.Handler {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/healthz", app.handlerHealthz)
+
+		r.Post("/users", app.handlerCreateUser)
 	})
 
 	return r

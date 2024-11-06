@@ -12,18 +12,20 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, created_at, updated_at, username, email, password_hash)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, created_at, updated_at, username, email, password_hash
+INSERT INTO users (id, created_at, updated_at, username, email, password, first_name, last_name)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, created_at, updated_at, username, email, first_name, last_name, password
 `
 
 type CreateUserParams struct {
-	ID           pgtype.UUID
-	CreatedAt    pgtype.Timestamp
-	UpdatedAt    pgtype.Timestamp
-	Username     string
-	Email        string
-	PasswordHash string
+	ID        pgtype.UUID
+	CreatedAt pgtype.Timestamp
+	UpdatedAt pgtype.Timestamp
+	Username  string
+	Email     string
+	Password  []byte
+	FirstName string
+	LastName  string
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -33,7 +35,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.UpdatedAt,
 		arg.Username,
 		arg.Email,
-		arg.PasswordHash,
+		arg.Password,
+		arg.FirstName,
+		arg.LastName,
 	)
 	var i User
 	err := row.Scan(
@@ -42,7 +46,29 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.Username,
 		&i.Email,
-		&i.PasswordHash,
+		&i.FirstName,
+		&i.LastName,
+		&i.Password,
+	)
+	return i, err
+}
+
+const getUserByUsername = `-- name: GetUserByUsername :one
+SELECT id, created_at, updated_at, username, email, first_name, last_name, password FROM users WHERE username == $1
+`
+
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByUsername, username)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Username,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+		&i.Password,
 	)
 	return i, err
 }

@@ -5,7 +5,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/maxolivera/gophis-social-network/internal/api"
@@ -59,7 +58,9 @@ func main() {
 	}
 
 	// == DATABASE ==
-	/*  TODO(maolivera): look how to configure and create a pool with SQLC and PGX
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	dbConfig, err := pgxpool.ParseConfig(cfg.Database.Addr)
 	if err != nil {
 		log.Fatalf("could not parse database_url: %v\n", err)
@@ -69,30 +70,19 @@ func main() {
 	dbConfig.MinConns = int32(cfg.Database.MaxIdleConnections)
 	dbConfig.MaxConnIdleTime = cfg.Database.MaxIdleTime
 
-	dbpool, err := pgxpool.NewWithConfig(
-		ctx,
-		dbConfig,
-	)
+	pool, err := pgxpool.NewWithConfig(ctx, dbConfig)
 	if err != nil {
 		log.Fatalln("could not create connection pool:", err)
 	}
-	defer dbpool.Close()
+	defer pool.Close()
 	log.Println("database connection pool established")
-	*/
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
-	conn, err := pgx.Connect(ctx, cfg.Database.Addr)
-	if err != nil {
-		log.Fatalln("could not connect to database: ", err)
-	}
-
-	db := database.New(conn)
+	queries := database.New(pool)
 
 	// == APPLICATION ==
 	app := &api.Application{
 		Config:   cfg,
-		Database: db,
+		Database: queries,
 	}
 
 	log.Fatalln(app.Start())

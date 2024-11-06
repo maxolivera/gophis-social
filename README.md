@@ -24,3 +24,7 @@ It's started as a project to follows [SelfMadeEngineer](www.skool.com/self-made-
 
 - [ ] Use HTTP 3 as default and use fallback mechanisms to set HTTP 2 and 1.1.
 - [ ] Replace `chi` with own implementation.
+
+## TODO
+
+- [ ] Better queries

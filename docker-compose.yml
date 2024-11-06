@@ -1,17 +1,15 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:16.3
     container_name: postgres-db
     environment:
-      POSTGRES_DB: gophis
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
     volumes:
-      - db-data:/var/lib/posgresql/data
+      - db-data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
 volumes:
   db-data:
