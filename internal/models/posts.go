@@ -16,6 +16,7 @@ type Post struct {
 	Content   string    `json:"content"`
 	Tags      []string  `json:"tags"`
 	Comments  []Comment `json:"comments"`
+	Version   int32     `json:"version"`
 }
 
 func DBPostToPost(dbPost database.Post) Post {
@@ -27,6 +28,7 @@ func DBPostToPost(dbPost database.Post) Post {
 		Title:     dbPost.Title,
 		Content:   dbPost.Content,
 		Tags:      dbPost.Tags,
+		Version:   dbPost.Version,
 	}
 }
 

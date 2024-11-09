@@ -26,6 +26,7 @@ type Post struct {
 	UserID    pgtype.UUID
 	Tags      []string
 	IsDeleted bool
+	Version   int32
 }
 
 type User struct {

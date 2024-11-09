@@ -172,7 +172,12 @@ func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Req
 		Valid: true,
 	}
 
-	deleted, err := app.Database.SoftDeletePostByID(r.Context(), pgID)
+	params := database.SoftDeletePostByIDParams{
+		ID:      pgID,
+		Version: post.Version,
+	}
+
+	deleted, err := app.Database.SoftDeletePostByID(r.Context(), params)
 	if err != nil {
 		switch err {
 		case pgx.ErrNoRows:
@@ -200,7 +205,12 @@ func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Req
 		Valid: true,
 	}
 
-	_, err := app.Database.HardDeletePostByID(r.Context(), pgID)
+	params := database.HardDeletePostByIDParams{
+		ID:      pgID,
+		Version: post.Version,
+	}
+
+	_, err := app.Database.HardDeletePostByID(r.Context(), params)
 	if err != nil {
 		switch err {
 		case pgx.ErrNoRows:
@@ -242,6 +252,7 @@ func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request
 		Content:   pgContent,
 		Title:     pgTitle,
 		Tags:      in.Tags,
+		Version:   post.Version,
 	}
 
 	newDBPost, err := app.Database.UpdatePost(r.Context(), params)

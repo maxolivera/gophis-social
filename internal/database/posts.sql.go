@@ -49,7 +49,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (CreateP
 }
 
 const getPostById = `-- name: GetPostById :one
-SELECT id, created_at, updated_at, title, content, user_id, tags, is_deleted FROM posts WHERE id = $1 AND is_deleted = false
+SELECT id, created_at, updated_at, title, content, user_id, tags, is_deleted, version FROM posts WHERE id = $1 AND is_deleted = false
 `
 
 func (q *Queries) GetPostById(ctx context.Context, id pgtype.UUID) (Post, error) {
@@ -64,12 +64,13 @@ func (q *Queries) GetPostById(ctx context.Context, id pgtype.UUID) (Post, error)
 		&i.UserID,
 		&i.Tags,
 		&i.IsDeleted,
+		&i.Version,
 	)
 	return i, err
 }
 
 const getPostByUser = `-- name: GetPostByUser :many
-SELECT id, created_at, updated_at, title, content, user_id, tags, is_deleted FROM posts WHERE user_id = $1 AND is_deleted = false
+SELECT id, created_at, updated_at, title, content, user_id, tags, is_deleted, version FROM posts WHERE user_id = $1 AND is_deleted = false
 `
 
 func (q *Queries) GetPostByUser(ctx context.Context, userID pgtype.UUID) ([]Post, error) {
@@ -90,6 +91,7 @@ func (q *Queries) GetPostByUser(ctx context.Context, userID pgtype.UUID) ([]Post
 			&i.UserID,
 			&i.Tags,
 			&i.IsDeleted,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -102,11 +104,16 @@ func (q *Queries) GetPostByUser(ctx context.Context, userID pgtype.UUID) ([]Post
 }
 
 const hardDeletePostByID = `-- name: HardDeletePostByID :one
-DELETE FROM posts WHERE id = $1 RETURNING id, created_at, updated_at, title, content, user_id, tags, is_deleted
+DELETE FROM posts WHERE id = $1 and version = $2 RETURNING id, created_at, updated_at, title, content, user_id, tags, is_deleted, version
 `
 
-func (q *Queries) HardDeletePostByID(ctx context.Context, id pgtype.UUID) (Post, error) {
-	row := q.db.QueryRow(ctx, hardDeletePostByID, id)
+type HardDeletePostByIDParams struct {
+	ID      pgtype.UUID
+	Version int32
+}
+
+func (q *Queries) HardDeletePostByID(ctx context.Context, arg HardDeletePostByIDParams) (Post, error) {
+	row := q.db.QueryRow(ctx, hardDeletePostByID, arg.ID, arg.Version)
 	var i Post
 	err := row.Scan(
 		&i.ID,
@@ -117,6 +124,7 @@ func (q *Queries) HardDeletePostByID(ctx context.Context, id pgtype.UUID) (Post,
 		&i.UserID,
 		&i.Tags,
 		&i.IsDeleted,
+		&i.Version,
 	)
 	return i, err
 }
@@ -124,12 +132,17 @@ func (q *Queries) HardDeletePostByID(ctx context.Context, id pgtype.UUID) (Post,
 const softDeletePostByID = `-- name: SoftDeletePostByID :one
 UPDATE posts
 SET is_deleted = true
-WHERE id = $1
+WHERE id = $1 and version = $2
 RETURNING is_deleted
 `
 
-func (q *Queries) SoftDeletePostByID(ctx context.Context, id pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, softDeletePostByID, id)
+type SoftDeletePostByIDParams struct {
+	ID      pgtype.UUID
+	Version int32
+}
+
+func (q *Queries) SoftDeletePostByID(ctx context.Context, arg SoftDeletePostByIDParams) (bool, error) {
+	row := q.db.QueryRow(ctx, softDeletePostByID, arg.ID, arg.Version)
 	var is_deleted bool
 	err := row.Scan(&is_deleted)
 	return is_deleted, err
@@ -139,16 +152,17 @@ const updatePost = `-- name: UpdatePost :one
 UPDATE posts
 SET
 	updated_at = $1,
-	title = coalesce($3, title),
-	content = coalesce($4, content),
-	tags = coalesce($5, tags)
-WHERE id = $2 AND is_deleted = false
-RETURNING id, created_at, updated_at, title, content, user_id, tags, is_deleted
+	title = coalesce($4, title),
+	content = coalesce($5, content),
+	tags = coalesce($6, tags)
+WHERE id = $2 AND is_deleted = false AND version = $3
+RETURNING id, created_at, updated_at, title, content, user_id, tags, is_deleted, version
 `
 
 type UpdatePostParams struct {
 	UpdatedAt pgtype.Timestamp
 	ID        pgtype.UUID
+	Version   int32
 	Title     pgtype.Text
 	Content   pgtype.Text
 	Tags      []string
@@ -158,6 +172,7 @@ func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, e
 	row := q.db.QueryRow(ctx, updatePost,
 		arg.UpdatedAt,
 		arg.ID,
+		arg.Version,
 		arg.Title,
 		arg.Content,
 		arg.Tags,
@@ -172,6 +187,7 @@ func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, e
 		&i.UserID,
 		&i.Tags,
 		&i.IsDeleted,
+		&i.Version,
 	)
 	return i, err
 }
