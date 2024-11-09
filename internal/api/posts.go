@@ -150,7 +150,7 @@ func (app *Application) handlerGetPost(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, post)
 }
 
-func (app *Application) handlerDeletePost(w http.ResponseWriter, r *http.Request) {
+func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("postID")
 	if idStr == "" {
 		err := fmt.Errorf("post_id not provided")
@@ -171,7 +171,7 @@ func (app *Application) handlerDeletePost(w http.ResponseWriter, r *http.Request
 		Valid: true,
 	}
 
-	if err = app.Database.DeletePostByID(r.Context(), pgID); err != nil {
+	if err = app.Database.SoftDeletePostByID(r.Context(), pgID); err != nil {
 		err := fmt.Errorf("post could not deleted: %v", err)
 		respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
 		return
@@ -180,6 +180,35 @@ func (app *Application) handlerDeletePost(w http.ResponseWriter, r *http.Request
 	respondWithJSON(w, http.StatusOK, nil)
 }
 
+func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("postID")
+	if idStr == "" {
+		err := fmt.Errorf("post_id not provided")
+		// TODO(maolivera): maybe another message?
+		respondWithError(w, r, http.StatusBadRequest, err, err.Error())
+		return
+	}
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		err := fmt.Errorf("post_id not valid: %v", err)
+		respondWithError(w, r, http.StatusBadRequest, err, "post not found")
+		return
+	}
+
+	pgID := pgtype.UUID{
+		Bytes: id,
+		Valid: true,
+	}
+
+	if err = app.Database.HardDeletePostByID(r.Context(), pgID); err != nil {
+		err := fmt.Errorf("post could not deleted: %v", err)
+		respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, nil)
+}
 func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request) {
 	respondWithError(w, r, http.StatusNotImplemented, nil,"not implemented yet")
 }

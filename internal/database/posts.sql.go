@@ -48,17 +48,8 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (CreateP
 	return i, err
 }
 
-const deletePostByID = `-- name: DeletePostByID :exec
-DELETE FROM posts WHERE id = $1
-`
-
-func (q *Queries) DeletePostByID(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deletePostByID, id)
-	return err
-}
-
 const getPostById = `-- name: GetPostById :one
-SELECT id, created_at, updated_at, title, content, user_id, tags FROM posts WHERE id = $1
+SELECT id, created_at, updated_at, title, content, user_id, tags, is_deleted FROM posts WHERE id = $1 AND is_deleted = false
 `
 
 func (q *Queries) GetPostById(ctx context.Context, id pgtype.UUID) (Post, error) {
@@ -72,12 +63,13 @@ func (q *Queries) GetPostById(ctx context.Context, id pgtype.UUID) (Post, error)
 		&i.Content,
 		&i.UserID,
 		&i.Tags,
+		&i.IsDeleted,
 	)
 	return i, err
 }
 
 const getPostByUser = `-- name: GetPostByUser :many
-SELECT id, created_at, updated_at, title, content, user_id, tags FROM posts WHERE user_id = $1
+SELECT id, created_at, updated_at, title, content, user_id, tags, is_deleted FROM posts WHERE user_id = $1 AND is_deleted = false
 `
 
 func (q *Queries) GetPostByUser(ctx context.Context, userID pgtype.UUID) ([]Post, error) {
@@ -97,6 +89,7 @@ func (q *Queries) GetPostByUser(ctx context.Context, userID pgtype.UUID) ([]Post
 			&i.Content,
 			&i.UserID,
 			&i.Tags,
+			&i.IsDeleted,
 		); err != nil {
 			return nil, err
 		}
@@ -106,6 +99,26 @@ func (q *Queries) GetPostByUser(ctx context.Context, userID pgtype.UUID) ([]Post
 		return nil, err
 	}
 	return items, nil
+}
+
+const hardDeletePostByID = `-- name: HardDeletePostByID :exec
+DELETE FROM posts WHERE id = $1
+`
+
+func (q *Queries) HardDeletePostByID(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, hardDeletePostByID, id)
+	return err
+}
+
+const softDeletePostByID = `-- name: SoftDeletePostByID :exec
+UPDATE posts
+SET is_deleted = true
+WHERE id = $1
+`
+
+func (q *Queries) SoftDeletePostByID(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, softDeletePostByID, id)
+	return err
 }
 
 const updatePost = `-- name: UpdatePost :exec
