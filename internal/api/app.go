@@ -69,6 +69,8 @@ func (app *Application) GetHandlers() http.Handler {
 		r.Route("/posts", func(r chi.Router) {
 			r.Post("/", app.handlerCreatePost)
 			r.Route("/{postID}", func(r chi.Router) {
+				r.Use(app.middlewarePostContext)
+
 				r.Get("/", app.handlerGetPost)
 				r.Patch("/", app.handlerUpdatePost)
 				// TODO(maolivera): add hard delete for admins

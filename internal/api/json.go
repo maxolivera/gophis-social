@@ -8,6 +8,8 @@ import (
 
 const MAX_BYTES = 1_048_578 // 1 MB
 
+// TODO(maolivera): Better functions to return JSON respones, following some kind of standard
+
 func respondWithJSON(w http.ResponseWriter, code int, payload any) {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -29,22 +31,26 @@ func respondWithJSON(w http.ResponseWriter, code int, payload any) {
 // Will sent a response to the client with code `code` and message `message`, and will log the error `err`
 func respondWithError(w http.ResponseWriter, r *http.Request, code int, err error, message string) {
 	type response struct {
-		Error string `json:"error"`
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
 	}
 
 	res := response{}
 
+	res.Error.Code = code
 	// default messages for specific codes
 	if message == "" {
 		switch code {
 		case http.StatusInternalServerError:
-			res.Error = "the server encountered a problem"
+			res.Error.Message = "the server encountered a problem"
 		default:
 			log.Printf("the HTTP code %d do not support default message, an empty message will be sent", code)
-			res.Error = ""
+			res.Error.Message = ""
 		}
 	} else {
-		res.Error = message
+		res.Error.Message = message
 	}
 
 	log.Printf("sending: %d on method %s, path: %s error: %s\n", code, r.Method, r.URL.Path, err)

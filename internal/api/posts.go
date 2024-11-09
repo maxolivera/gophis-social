@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -14,6 +15,67 @@ import (
 
 const MAX_TITLE_LENGTH = 200
 const MAX_CONTENT_LENGTH = 1000
+
+func (app *Application) middlewarePostContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		idStr := r.PathValue("postID")
+		if idStr == "" {
+			err := fmt.Errorf("post_id not provided")
+			// TODO(maolivera): maybe another message?
+			respondWithError(w, r, http.StatusBadRequest, err, err.Error())
+			return
+		}
+
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			err := fmt.Errorf("post_id not valid: %v", err)
+			respondWithError(w, r, http.StatusBadRequest, err, "post not found")
+			return
+		}
+
+		pgID := pgtype.UUID{
+			Bytes: id,
+			Valid: true,
+		}
+
+		dbPost, err := app.Database.GetPostById(
+			ctx,
+			pgID,
+		)
+
+		if err != nil {
+			switch err {
+			case pgx.ErrNoRows:
+				err := fmt.Errorf("post_id not found: %v", err)
+				respondWithError(w, r, http.StatusNotFound, err, "post not found")
+			default:
+				respondWithError(w, r, http.StatusInternalServerError, err, "")
+			}
+			return
+		}
+		dbComments, err := app.Database.GetCommentsByPost(r.Context(), dbPost.ID)
+		if err != nil {
+			switch err {
+			case pgx.ErrNoRows:
+			// TODO(maolivera): maybe add logging? but seems uncessary to add logs if no comments found
+			default:
+				respondWithError(w, r, http.StatusInternalServerError, err, "")
+			}
+			return
+		}
+		post := models.DBPostToPost(dbPost)
+		comments := models.DBCommentsWithUser(dbComments)
+		post.Comments = comments
+
+		ctx = context.WithValue(ctx, "post", &post)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func getPostFromCtx(r *http.Request) *models.Post {
+	return r.Context().Value("post").(*models.Post)
+}
 
 func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request) {
 	// types for JSON's input and output
@@ -98,82 +160,33 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 }
 
 func (app *Application) handlerGetPost(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("postID")
-	if idStr == "" {
-		err := fmt.Errorf("post_id not provided")
-		// TODO(maolivera): maybe another message?
-		respondWithError(w, r, http.StatusBadRequest, err, err.Error())
-		return
-	}
-
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		err := fmt.Errorf("post_id not valid: %v", err)
-		respondWithError(w, r, http.StatusBadRequest, err, "post not found")
-		return
-	}
-
-	pgID := pgtype.UUID{
-		Bytes: id,
-		Valid: true,
-	}
-
-	dbPost, err := app.Database.GetPostById(
-		r.Context(),
-		pgID,
-	)
-
-	if err != nil {
-		switch err {
-		case pgx.ErrNoRows:
-			err := fmt.Errorf("post_id not found: %v", err)
-			respondWithError(w, r, http.StatusNotFound, err, "post not found")
-		default:
-			respondWithError(w, r, http.StatusInternalServerError, err, "")
-		}
-		return
-	}
-	dbComments, err := app.Database.GetCommentsByPost(r.Context(), dbPost.ID)
-	if err != nil {
-		switch err {
-		case pgx.ErrNoRows:
-		// TODO(maolivera): maybe add logging? but seems uncessary to add logs if no comments found
-		default:
-			respondWithError(w, r, http.StatusInternalServerError, err, "")
-		}
-		return
-	}
-	post := models.DBPostToPost(dbPost)
-	comments := models.DBCommentsWithUser(dbComments)
-	post.Comments = comments
+	post := getPostFromCtx(r)
 
 	respondWithJSON(w, http.StatusOK, post)
 }
 
 func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("postID")
-	if idStr == "" {
-		err := fmt.Errorf("post_id not provided")
-		// TODO(maolivera): maybe another message?
-		respondWithError(w, r, http.StatusBadRequest, err, err.Error())
-		return
-	}
-
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		err := fmt.Errorf("post_id not valid: %v", err)
-		respondWithError(w, r, http.StatusBadRequest, err, "post not found")
-		return
-	}
-
+	post := getPostFromCtx(r)
 	pgID := pgtype.UUID{
-		Bytes: id,
+		Bytes: post.ID,
 		Valid: true,
 	}
 
-	if err = app.Database.SoftDeletePostByID(r.Context(), pgID); err != nil {
-		err := fmt.Errorf("post could not deleted: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+	deleted, err := app.Database.SoftDeletePostByID(r.Context(), pgID)
+	if err != nil {
+		switch err {
+		case pgx.ErrNoRows:
+			err := fmt.Errorf("post was not deleted because was not found post_id: %v", post.ID)
+			respondWithError(w, r, http.StatusNotFound, err, "post not found")
+		default:
+			err := fmt.Errorf("post could not deleted: %v", err)
+			respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+		}
+		return
+	}
+	if !deleted {
+		err := fmt.Errorf("post was not deleted, post_id: %v", post.ID)
+		respondWithError(w, r, http.StatusNotFound, err, "post not found")
 		return
 	}
 
@@ -181,29 +194,22 @@ func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Req
 }
 
 func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("postID")
-	if idStr == "" {
-		err := fmt.Errorf("post_id not provided")
-		// TODO(maolivera): maybe another message?
-		respondWithError(w, r, http.StatusBadRequest, err, err.Error())
-		return
-	}
-
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		err := fmt.Errorf("post_id not valid: %v", err)
-		respondWithError(w, r, http.StatusBadRequest, err, "post not found")
-		return
-	}
-
+	post := getPostFromCtx(r)
 	pgID := pgtype.UUID{
-		Bytes: id,
+		Bytes: post.ID,
 		Valid: true,
 	}
 
-	if err = app.Database.HardDeletePostByID(r.Context(), pgID); err != nil {
-		err := fmt.Errorf("post could not deleted: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+	_, err := app.Database.HardDeletePostByID(r.Context(), pgID)
+	if err != nil {
+		switch err {
+		case pgx.ErrNoRows:
+			err := fmt.Errorf("post not deleted, not found, post id: %v error: %v", post.ID, err)
+			respondWithError(w, r, http.StatusNotFound, err, "post not found")
+		default:
+			err := fmt.Errorf("post could not deleted: %v", err)
+			respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+		}
 		return
 	}
 
@@ -216,20 +222,7 @@ func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request
 		Title   string   `json:"title,omitempty"`
 		Tags    []string `json:"tags,omitempty"`
 	}
-	// get id
-	idStr := r.PathValue("postID")
-	if idStr == "" {
-		err := fmt.Errorf("post_id not provided")
-		// TODO(maolivera): maybe another message?
-		respondWithError(w, r, http.StatusBadRequest, err, err.Error())
-		return
-	}
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		err := fmt.Errorf("post_id not valid: %v", err)
-		respondWithError(w, r, http.StatusBadRequest, err, "post not found")
-		return
-	}
+	post := getPostFromCtx(r)
 
 	in := input{}
 	if err := readJSON(w, r, &in); err != nil {
@@ -241,7 +234,7 @@ func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request
 	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
 	pgContent := pgtype.Text{String: in.Content, Valid: len(in.Content) > 0}
 	pgTitle := pgtype.Text{String: in.Title, Valid: len(in.Title) > 0}
-	pgID := pgtype.UUID{Bytes: id, Valid: true}
+	pgID := pgtype.UUID{Bytes: post.ID, Valid: true}
 
 	params := database.UpdatePostParams{
 		UpdatedAt: pgTime,
