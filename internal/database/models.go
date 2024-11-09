@@ -17,6 +17,12 @@ type Comment struct {
 	Content   string
 }
 
+type Follower struct {
+	UserID     pgtype.UUID
+	FollowerID pgtype.UUID
+	CreatedAt  pgtype.Timestamp
+}
+
 type Post struct {
 	ID        pgtype.UUID
 	CreatedAt pgtype.Timestamp

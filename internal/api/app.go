@@ -71,6 +71,9 @@ func (app *Application) GetHandlers() http.Handler {
 				r.Patch("/", app.handlerUpdateUser)
 				// TODO(maolivera): add hard delete for admins
 				r.Delete("/", app.handlerSoftDeleteUser)
+
+				r.Put("/follow", app.handlerFollowUser)
+				r.Put("/unfollow", app.handlerUnfollowUser)
 			})
 		})
 
