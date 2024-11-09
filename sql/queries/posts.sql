@@ -11,10 +11,15 @@ UPDATE posts
 SET is_deleted = true
 WHERE id = $1;
 
--- name: UpdatePost :exec
+-- name: UpdatePost :one
 UPDATE posts
-SET updated_at = $1, title = $2, content = $3, tags = $4
-WHERE id = $5;
+SET
+	updated_at = $1,
+	title = coalesce(sqlc.narg('title'), title),
+	content = coalesce(sqlc.narg('content'), content),
+	tags = coalesce(sqlc.narg('tags'), tags)
+WHERE id = $2 AND is_deleted = false
+RETURNING *;
 
 -- name: GetPostByUser :many
 SELECT * FROM posts WHERE user_id = $1 AND is_deleted = false;

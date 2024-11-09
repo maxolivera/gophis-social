@@ -25,7 +25,7 @@ type Post struct {
 	Content   string
 	UserID    pgtype.UUID
 	Tags      []string
-	IsDeleted pgtype.Bool
+	IsDeleted bool
 }
 
 type User struct {

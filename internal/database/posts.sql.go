@@ -121,27 +121,43 @@ func (q *Queries) SoftDeletePostByID(ctx context.Context, id pgtype.UUID) error 
 	return err
 }
 
-const updatePost = `-- name: UpdatePost :exec
+const updatePost = `-- name: UpdatePost :one
 UPDATE posts
-SET updated_at = $1, title = $2, content = $3, tags = $4
-WHERE id = $5
+SET
+	updated_at = $1,
+	title = coalesce($3, title),
+	content = coalesce($4, content),
+	tags = coalesce($5, tags)
+WHERE id = $2 AND is_deleted = false
+RETURNING id, created_at, updated_at, title, content, user_id, tags, is_deleted
 `
 
 type UpdatePostParams struct {
 	UpdatedAt pgtype.Timestamp
-	Title     string
-	Content   string
-	Tags      []string
 	ID        pgtype.UUID
+	Title     pgtype.Text
+	Content   pgtype.Text
+	Tags      []string
 }
 
-func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) error {
-	_, err := q.db.Exec(ctx, updatePost,
+func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, error) {
+	row := q.db.QueryRow(ctx, updatePost,
 		arg.UpdatedAt,
+		arg.ID,
 		arg.Title,
 		arg.Content,
 		arg.Tags,
-		arg.ID,
 	)
-	return err
+	var i Post
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Title,
+		&i.Content,
+		&i.UserID,
+		&i.Tags,
+		&i.IsDeleted,
+	)
+	return i, err
 }

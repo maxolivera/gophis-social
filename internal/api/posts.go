@@ -209,6 +209,60 @@ func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Req
 
 	respondWithJSON(w, http.StatusOK, nil)
 }
+
 func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request) {
-	respondWithError(w, r, http.StatusNotImplemented, nil,"not implemented yet")
+	type input struct {
+		Content string   `json:"content,omitempty"`
+		Title   string   `json:"title,omitempty"`
+		Tags    []string `json:"tags,omitempty"`
+	}
+	// get id
+	idStr := r.PathValue("postID")
+	if idStr == "" {
+		err := fmt.Errorf("post_id not provided")
+		// TODO(maolivera): maybe another message?
+		respondWithError(w, r, http.StatusBadRequest, err, err.Error())
+		return
+	}
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		err := fmt.Errorf("post_id not valid: %v", err)
+		respondWithError(w, r, http.StatusBadRequest, err, "post not found")
+		return
+	}
+
+	in := input{}
+	if err := readJSON(w, r, &in); err != nil {
+		err = fmt.Errorf("error reading input parameters: %v", err)
+		respondWithError(w, r, http.StatusInternalServerError, err, "")
+	}
+
+	currentTime := time.Now().UTC()
+	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
+	pgContent := pgtype.Text{String: in.Content, Valid: len(in.Content) > 0}
+	pgTitle := pgtype.Text{String: in.Title, Valid: len(in.Title) > 0}
+	pgID := pgtype.UUID{Bytes: id, Valid: true}
+
+	params := database.UpdatePostParams{
+		UpdatedAt: pgTime,
+		ID:        pgID,
+		Content:   pgContent,
+		Title:     pgTitle,
+		Tags:      in.Tags,
+	}
+
+	newDBPost, err := app.Database.UpdatePost(r.Context(), params)
+	if err != nil {
+		switch err {
+		case pgx.ErrNoRows:
+			respondWithError(w, r, http.StatusNotFound, err, "post not found")
+		default:
+			err := fmt.Errorf("post could not updated: %v", err)
+			respondWithError(w, r, http.StatusInternalServerError, err, "")
+		}
+		return
+	}
+	newPost := models.DBPostToPost(newDBPost)
+
+	respondWithJSON(w, http.StatusOK, newPost)
 }
