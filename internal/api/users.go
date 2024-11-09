@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/maxolivera/gophis-social-network/internal/database"
 	"golang.org/x/crypto/bcrypt"
@@ -87,7 +88,24 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 		userParams,
 	)
 	if err != nil {
-		err := fmt.Errorf("error during user creation:", err)
+		if pgErr, ok := err.(*pgconn.PgError); ok {
+			switch pgErr.ConstraintName {
+			case "users_username_key":
+				msg := "username not available"
+				err = fmt.Errorf("%s: %v", msg, err)
+				respondWithError(w, r, http.StatusConflict, err, msg)
+				return
+			case "users_email_key":
+				msg := "email not available"
+				err = fmt.Errorf("%s: %v", msg, err)
+				respondWithError(w, r, http.StatusConflict, err, msg)
+				return
+			default:
+				err = fmt.Errorf("error during user creation: %v", err)
+			}
+		} else {
+			err = fmt.Errorf("error during user creation: %v", err)
+		}
 		respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
