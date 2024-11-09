@@ -1,30 +1,21 @@
 package api
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
 )
 
 func (app *Application) handlerHealthz(w http.ResponseWriter, r *http.Request) {
 	type response struct {
-		Status string `json:"status"`
+		Status  string `json:"status"`
+		Env     string `json:"env"`
+		Version string `json:"version"`
 	}
 
 	res := response{
 		Status: "ok",
+		Env: app.Config.Environment,
+		Version: app.Config.Version,
 	}
 
-	data, err := json.Marshal(res)
-	if err != nil {
-		log.Printf("Failed to marshal JSON response: %v", res)
-		log.Printf("Error: %v", err)
-		w.WriteHeader(500)
-		return
-	}
-
-	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(data)
-	return
+	respondWithJSON(w, http.StatusOK, res)
 }
