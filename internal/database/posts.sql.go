@@ -11,13 +11,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createPosts = `-- name: CreatePosts :one
+const createPost = `-- name: CreatePost :one
 INSERT INTO posts (id, created_at, updated_at, user_id, title, content, tags)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, created_at, title
 `
 
-type CreatePostsParams struct {
+type CreatePostParams struct {
 	ID        pgtype.UUID
 	CreatedAt pgtype.Timestamp
 	UpdatedAt pgtype.Timestamp
@@ -27,14 +27,14 @@ type CreatePostsParams struct {
 	Tags      []string
 }
 
-type CreatePostsRow struct {
+type CreatePostRow struct {
 	ID        pgtype.UUID
 	CreatedAt pgtype.Timestamp
 	Title     string
 }
 
-func (q *Queries) CreatePosts(ctx context.Context, arg CreatePostsParams) (CreatePostsRow, error) {
-	row := q.db.QueryRow(ctx, createPosts,
+func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (CreatePostRow, error) {
+	row := q.db.QueryRow(ctx, createPost,
 		arg.ID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -43,9 +43,18 @@ func (q *Queries) CreatePosts(ctx context.Context, arg CreatePostsParams) (Creat
 		arg.Content,
 		arg.Tags,
 	)
-	var i CreatePostsRow
+	var i CreatePostRow
 	err := row.Scan(&i.ID, &i.CreatedAt, &i.Title)
 	return i, err
+}
+
+const deletePostByID = `-- name: DeletePostByID :exec
+DELETE FROM posts WHERE id = $1
+`
+
+func (q *Queries) DeletePostByID(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deletePostByID, id)
+	return err
 }
 
 const getPostById = `-- name: GetPostById :one
@@ -97,4 +106,29 @@ func (q *Queries) GetPostByUser(ctx context.Context, userID pgtype.UUID) ([]Post
 		return nil, err
 	}
 	return items, nil
+}
+
+const updatePost = `-- name: UpdatePost :exec
+UPDATE posts
+SET updated_at = $1, title = $2, content = $3, tags = $4
+WHERE id = $5
+`
+
+type UpdatePostParams struct {
+	UpdatedAt pgtype.Timestamp
+	Title     string
+	Content   string
+	Tags      []string
+	ID        pgtype.UUID
+}
+
+func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) error {
+	_, err := q.db.Exec(ctx, updatePost,
+		arg.UpdatedAt,
+		arg.Title,
+		arg.Content,
+		arg.Tags,
+		arg.ID,
+	)
+	return err
 }

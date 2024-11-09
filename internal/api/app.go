@@ -68,8 +68,11 @@ func (app *Application) GetHandlers() http.Handler {
 
 		r.Route("/posts", func(r chi.Router) {
 			r.Post("/", app.handlerCreatePost)
-
-			r.Get("/{postID}", app.handlerGetPost)
+			r.Route("/{postID}", func(r chi.Router) {
+				r.Get("/", app.handlerGetPost)
+				r.Patch("/", app.handlerUpdatePost)
+				r.Delete("/", app.handlerDeletePost)
+			})
 		})
 	})
 

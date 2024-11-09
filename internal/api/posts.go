@@ -66,7 +66,7 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 	currentTime := time.Now().UTC()
 	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
 
-	postParams := database.CreatePostsParams{
+	postParams := database.CreatePostParams{
 		ID:        pgID,
 		UserID:    pgUserID,
 		CreatedAt: pgTime,
@@ -77,7 +77,7 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 	}
 
 	// store user
-	post, err := app.Database.CreatePosts(
+	post, err := app.Database.CreatePost(
 		r.Context(),
 		postParams,
 	)
@@ -148,4 +148,38 @@ func (app *Application) handlerGetPost(w http.ResponseWriter, r *http.Request) {
 	post.Comments = comments
 
 	respondWithJSON(w, http.StatusOK, post)
+}
+
+func (app *Application) handlerDeletePost(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("postID")
+	if idStr == "" {
+		err := fmt.Errorf("post_id not provided")
+		// TODO(maolivera): maybe another message?
+		respondWithError(w, r, http.StatusBadRequest, err, err.Error())
+		return
+	}
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		err := fmt.Errorf("post_id not valid: %v", err)
+		respondWithError(w, r, http.StatusBadRequest, err, "post not found")
+		return
+	}
+
+	pgID := pgtype.UUID{
+		Bytes: id,
+		Valid: true,
+	}
+
+	if err = app.Database.DeletePostByID(r.Context(), pgID); err != nil {
+		err := fmt.Errorf("post could not deleted: %v", err)
+		respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, nil)
+}
+
+func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request) {
+	respondWithError(w, r, http.StatusNotImplemented, nil,"not implemented yet")
 }
