@@ -38,4 +38,5 @@ type User struct {
 	Password  []byte
 	FirstName pgtype.Text
 	LastName  pgtype.Text
+	IsDeleted bool
 }

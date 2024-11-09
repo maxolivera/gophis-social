@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, created_at, updated_at, username, email, password, first_name, last_name)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, created_at, updated_at, username, email, password, first_name, last_name
+RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted
 `
 
 type CreateUserParams struct {
@@ -49,12 +49,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Password,
 		&i.FirstName,
 		&i.LastName,
+		&i.IsDeleted,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, created_at, updated_at, username, email, password, first_name, last_name FROM users WHERE username = $1
+SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted FROM users WHERE username = $1 AND is_deleted = false
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -69,6 +70,69 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Password,
 		&i.FirstName,
 		&i.LastName,
+		&i.IsDeleted,
+	)
+	return i, err
+}
+
+const softDeleteUserByID = `-- name: SoftDeleteUserByID :one
+UPDATE users
+SET is_deleted = true
+WHERE id = $1
+RETURNING is_deleted
+`
+
+func (q *Queries) SoftDeleteUserByID(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, softDeleteUserByID, id)
+	var is_deleted bool
+	err := row.Scan(&is_deleted)
+	return is_deleted, err
+}
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE users
+SET
+	updated_at = $1,
+	username = coalesce($3, username),
+	email = coalesce($4, email),
+	first_name = coalesce($5, first_name),
+	last_name = coalesce($6, last_name),
+	password = coalesce($7, password)
+WHERE id = $2 AND is_deleted = false
+RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted
+`
+
+type UpdateUserParams struct {
+	UpdatedAt pgtype.Timestamp
+	ID        pgtype.UUID
+	Username  pgtype.Text
+	Email     pgtype.Text
+	FirstName pgtype.Text
+	LastName  pgtype.Text
+	Password  []byte
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.Username,
+		arg.Email,
+		arg.FirstName,
+		arg.LastName,
+		arg.Password,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Username,
+		&i.Email,
+		&i.Password,
+		&i.FirstName,
+		&i.LastName,
+		&i.IsDeleted,
 	)
 	return i, err
 }

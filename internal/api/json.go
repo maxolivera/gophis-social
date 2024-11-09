@@ -9,6 +9,7 @@ import (
 const MAX_BYTES = 1_048_578 // 1 MB
 
 // TODO(maolivera): Better functions to return JSON respones, following some kind of standard
+// TODO(maolivera): Respond with JSON should not respond with application/json if code is NoContent
 
 func respondWithJSON(w http.ResponseWriter, code int, payload any) {
 	data, err := json.Marshal(payload)

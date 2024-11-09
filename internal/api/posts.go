@@ -195,7 +195,7 @@ func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, nil)
+	respondWithJSON(w, http.StatusNoContent, nil)
 }
 
 func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Request) {
