@@ -16,8 +16,10 @@ type Application struct {
 }
 
 type Config struct {
-	Addr     string
-	Database *DBConfig
+	Addr        string
+	Database    *DBConfig
+	Environment string
+	Version     string
 }
 
 type DBConfig struct {
@@ -58,7 +60,17 @@ func (app *Application) GetHandlers() http.Handler {
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/healthz", app.handlerHealthz)
 
-		r.Post("/users", app.handlerCreateUser)
+		r.Route("/users", func(r chi.Router) {
+			r.Post("/", app.handlerCreateUser)
+
+			// r.Get("/{postID}", app.handlerGetPost)
+		})
+
+		r.Route("/posts", func(r chi.Router) {
+			r.Post("/", app.handlerCreatePost)
+
+			r.Get("/{postID}", app.handlerGetPost)
+		})
 	})
 
 	return r

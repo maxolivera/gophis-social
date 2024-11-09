@@ -12,9 +12,9 @@ import (
 )
 
 const createPosts = `-- name: CreatePosts :one
-INSERT INTO posts (id, created_at, updated_at, user_id, title, content)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, created_at
+INSERT INTO posts (id, created_at, updated_at, user_id, title, content, tags)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, created_at, title
 `
 
 type CreatePostsParams struct {
@@ -24,11 +24,13 @@ type CreatePostsParams struct {
 	UserID    pgtype.UUID
 	Title     string
 	Content   string
+	Tags      []string
 }
 
 type CreatePostsRow struct {
 	ID        pgtype.UUID
 	CreatedAt pgtype.Timestamp
+	Title     string
 }
 
 func (q *Queries) CreatePosts(ctx context.Context, arg CreatePostsParams) (CreatePostsRow, error) {
@@ -39,18 +41,19 @@ func (q *Queries) CreatePosts(ctx context.Context, arg CreatePostsParams) (Creat
 		arg.UserID,
 		arg.Title,
 		arg.Content,
+		arg.Tags,
 	)
 	var i CreatePostsRow
-	err := row.Scan(&i.ID, &i.CreatedAt)
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.Title)
 	return i, err
 }
 
-const getPostsById = `-- name: GetPostsById :one
-SELECT id, created_at, updated_at, title, content, user_id FROM posts WHERE id == $1
+const getPostById = `-- name: GetPostById :one
+SELECT id, created_at, updated_at, title, content, user_id, tags FROM posts WHERE id = $1
 `
 
-func (q *Queries) GetPostsById(ctx context.Context, id pgtype.UUID) (Post, error) {
-	row := q.db.QueryRow(ctx, getPostsById, id)
+func (q *Queries) GetPostById(ctx context.Context, id pgtype.UUID) (Post, error) {
+	row := q.db.QueryRow(ctx, getPostById, id)
 	var i Post
 	err := row.Scan(
 		&i.ID,
@@ -59,16 +62,17 @@ func (q *Queries) GetPostsById(ctx context.Context, id pgtype.UUID) (Post, error
 		&i.Title,
 		&i.Content,
 		&i.UserID,
+		&i.Tags,
 	)
 	return i, err
 }
 
-const getPostsByUser = `-- name: GetPostsByUser :many
-SELECT id, created_at, updated_at, title, content, user_id FROM posts WHERE user_id == $1
+const getPostByUser = `-- name: GetPostByUser :many
+SELECT id, created_at, updated_at, title, content, user_id, tags FROM posts WHERE user_id = $1
 `
 
-func (q *Queries) GetPostsByUser(ctx context.Context, userID pgtype.UUID) ([]Post, error) {
-	rows, err := q.db.Query(ctx, getPostsByUser, userID)
+func (q *Queries) GetPostByUser(ctx context.Context, userID pgtype.UUID) ([]Post, error) {
+	rows, err := q.db.Query(ctx, getPostByUser, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +87,7 @@ func (q *Queries) GetPostsByUser(ctx context.Context, userID pgtype.UUID) ([]Pos
 			&i.Title,
 			&i.Content,
 			&i.UserID,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}

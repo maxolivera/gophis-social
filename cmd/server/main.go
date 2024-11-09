@@ -12,6 +12,8 @@ import (
 	"github.com/maxolivera/gophis-social-network/internal/env"
 )
 
+const Version = "0.0.1"
+
 func main() {
 	// == ENV VALUES ==
 	err := godotenv.Load()
@@ -20,6 +22,11 @@ func main() {
 	}
 
 	addr, err := env.GetString("ADDR")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	environment, err := env.GetString("ENV")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -49,6 +56,8 @@ func main() {
 	// == CONFIG ==
 	cfg := &api.Config{
 		Addr: addr,
+		Environment: environment,
+		Version: Version,
 		Database: &api.DBConfig{
 			Addr:               dbUrl,
 			MaxOpenConnections: maxOpenConns,

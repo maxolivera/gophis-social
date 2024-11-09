@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, created_at, updated_at, username, email, password, first_name, last_name)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, created_at, updated_at, username, email, first_name, last_name, password
+RETURNING id, created_at, updated_at, username, email, password, first_name, last_name
 `
 
 type CreateUserParams struct {
@@ -24,8 +24,8 @@ type CreateUserParams struct {
 	Username  string
 	Email     string
 	Password  []byte
-	FirstName string
-	LastName  string
+	FirstName pgtype.Text
+	LastName  pgtype.Text
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -46,15 +46,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.Username,
 		&i.Email,
+		&i.Password,
 		&i.FirstName,
 		&i.LastName,
-		&i.Password,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, created_at, updated_at, username, email, first_name, last_name, password FROM users WHERE username == $1
+SELECT id, created_at, updated_at, username, email, password, first_name, last_name FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -66,9 +66,9 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.UpdatedAt,
 		&i.Username,
 		&i.Email,
+		&i.Password,
 		&i.FirstName,
 		&i.LastName,
-		&i.Password,
 	)
 	return i, err
 }
