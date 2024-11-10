@@ -14,7 +14,7 @@ import (
 const getUserFeed = `-- name: GetUserFeed :many
 SELECT
 	p.id, p.title, p.content, p.created_at, p.tags,
-	author.id, author.username, COUNT(c.id) AS comment_count
+	author.id AS author_id, author.username, COUNT(c.id) AS comment_count
 FROM posts p
 LEFT JOIN comments c ON c.post_id = p.id
 LEFT JOIN users author ON p.user_id = author.id
@@ -42,7 +42,7 @@ type GetUserFeedRow struct {
 	Content      string
 	CreatedAt    pgtype.Timestamp
 	Tags         []string
-	ID_2         pgtype.UUID
+	AuthorID     pgtype.UUID
 	Username     pgtype.Text
 	CommentCount int64
 }
@@ -67,7 +67,7 @@ func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]Get
 			&i.Content,
 			&i.CreatedAt,
 			&i.Tags,
-			&i.ID_2,
+			&i.AuthorID,
 			&i.Username,
 			&i.CommentCount,
 		); err != nil {

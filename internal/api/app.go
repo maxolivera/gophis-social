@@ -91,6 +91,7 @@ func (app *Application) GetHandlers() http.Handler {
 
 		// TODO(maolivera): Change to auth
 		r.Get("/", app.handlerFeed)
+		r.Get("/search", app.handlerSearch)
 	})
 
 	return r

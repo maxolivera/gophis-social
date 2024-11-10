@@ -1,7 +1,7 @@
 -- name: GetUserFeed :many
 SELECT
 	p.id, p.title, p.content, p.created_at, p.tags,
-	author.id, author.username, COUNT(c.id) AS comment_count
+	author.id AS author_id, author.username, COUNT(c.id) AS comment_count
 FROM posts p
 LEFT JOIN comments c ON c.post_id = p.id
 LEFT JOIN users author ON p.user_id = author.id

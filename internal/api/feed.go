@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/maxolivera/gophis-social-network/internal/database"
-	"github.com/maxolivera/gophis-social-network/internal/models"
+	// "github.com/maxolivera/gophis-social-network/internal/models"
 )
 
 func (app *Application) handlerFeed(w http.ResponseWriter, r *http.Request) {
@@ -48,8 +48,16 @@ func (app *Application) handlerFeed(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
+	respondWithJSON(w, http.StatusOK, dbFeed)
 
-	feed := models.DBFeedsToFeeds(dbFeed)
+	/*
+	feed, err := models.DBFeedsToFeeds(dbFeed)
+	if err != nil {
+		err = fmt.Errorf("error during parsing: %v", err)
+		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, feed)
+	*/
 }

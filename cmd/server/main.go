@@ -55,9 +55,9 @@ func main() {
 
 	// == CONFIG ==
 	cfg := &api.Config{
-		Addr: addr,
+		Addr:        addr,
 		Environment: environment,
-		Version: Version,
+		Version:     Version,
 		Database: &api.DBConfig{
 			Addr:               dbUrl,
 			MaxOpenConnections: maxOpenConns,
