@@ -88,6 +88,9 @@ func (app *Application) GetHandlers() http.Handler {
 				r.Delete("/", app.handlerSoftDeletePost)
 			})
 		})
+
+		// TODO(maolivera): Change to auth
+		r.Get("/", app.handlerFeed)
 	})
 
 	return r
