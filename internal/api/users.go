@@ -48,10 +48,27 @@ func (app *Application) middlewareUserContext(next http.Handler) http.Handler {
 	})
 }
 
-func getUserFromCtx(r *http.Request) *models.User {
-	return r.Context().Value("user").(*models.User)
+func getUserFromCtx(r *http.Request) models.User {
+	return r.Context().Value("user").(models.User)
 }
 
+// Create User godoc
+//
+//	@Summary		Creates a User
+//	@Description	Created a User
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Param			Username	header		string	true	"Username"
+//	@Param			Email		header		string	true	"Email"
+//	@Param			Password	header		string	true	"Password"
+//	@Param			FirstName	header		string	false	"First Name"
+//	@Param			LastName	header		string	false	"Last Name"
+//	@Success		200			{object}	models.User
+//	@Failure		500			{object}	error	"Something went wrong on the server"
+//	@Failure		409			{object}	error	"Either email or username already taken"
+//	@Failure		400			{object}	error	"Some parameter was either not provided or invalid."
+//	@Router			/users [post]
 func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	// types for JSON's input and output
 	type input struct {
@@ -60,11 +77,6 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 		Password  string `json:"password"`
 		FirstName string `json:"first_name,omitempty"`
 		LastName  string `json:"last_name,omitempty"`
-	}
-	type output struct {
-		Username string    `json:"username"`
-		ID       uuid.UUID `json:"id"`
-		Email    string    `json:"email"`
 	}
 	in := input{}
 
@@ -75,6 +87,7 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 	}
 
 	// check if some parameter was null
+
 	// NOTE(maolivera): should also check password standards or only leave it on client side?
 	if in.Username == "" || in.Email == "" || in.Password == "" {
 		err := fmt.Errorf("username, email, and password are required: %s\n", in)
@@ -123,10 +136,7 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 	}
 
 	// store user
-	user, err := app.Database.CreateUser(
-		r.Context(),
-		userParams,
-	)
+	dbUser, err := app.Database.CreateUser(r.Context(), userParams)
 	if err != nil {
 		if pgErr, ok := err.(*pgconn.PgError); ok {
 			switch pgErr.ConstraintName {
@@ -150,16 +160,24 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Marshal response
-	out := output{}
-	out.Username = user.Username
-	out.Email = user.Email
-	out.ID = user.ID.Bytes
+	user := models.DBUserToUser(dbUser)
 
 	// Send response
-	respondWithJSON(w, http.StatusOK, out)
+	respondWithJSON(w, http.StatusOK, user)
 }
 
+// Get User godoc
+//
+//	@Summary		Fetch a User
+//	@Description	Fetch a User
+//	@Tags			users
+//	@Produce		json
+//	@Param			username	path		string	true	"Username"
+//	@Success		200			{object}	models.User
+//	@Failure		404			{object}	error	"User not found"
+//	@Failure		400			{object}	error	"Some parameter was either not provided or invalid."
+//	@Failure		500			{object}	error	"Something went wrong on the server"
+//	@Router			/users/{username} [get]
 func (app *Application) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 	type output struct {
 		ID        uuid.UUID `json:"id"`
@@ -170,21 +188,21 @@ func (app *Application) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 		CreatedAt time.Time `json:"created_at"`
 	}
 	user := getUserFromCtx(r)
-	out := output{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		CreatedAt: user.CreatedAt,
-	}
-	if user.FirstName != "" {
-		out.FirstName = user.FirstName
-	}
-	if user.LastName != "" {
-		out.LastName = user.LastName
-	}
-	respondWithJSON(w, http.StatusOK, &out)
+	respondWithJSON(w, http.StatusOK, user)
 }
 
+// Soft Delete User godoc
+//
+//	@Summary		Soft Deletes a User
+//	@Description	The user will be marked as "deleted" on the database, it will not appear nor it can be accessed, but it will not be deleted from the database
+//	@Tags			users
+//	@Produce		json
+//	@Param			username	path	string	true	"Username"
+//	@Success		204			"The user was deleted"
+//	@Failure		400			{object}	error	"Some parameter was either not provided or invalid."
+//	@Failure		404			{object}	error	"User not found"
+//	@Failure		500			{object}	error	"Something went wrong on the server"
+//	@Router			/users/{username} [delete]
 func (app *Application) handlerSoftDeleteUser(w http.ResponseWriter, r *http.Request) {
 	user := getUserFromCtx(r)
 
@@ -214,6 +232,41 @@ func (app *Application) handlerSoftDeleteUser(w http.ResponseWriter, r *http.Req
 	respondWithJSON(w, http.StatusNoContent, nil)
 }
 
+/*
+// Hard Delete User godoc
+//
+//	@Summary		Hard Deletes a User
+//	@Description	The user will be deleted. Currently not used.
+//	@Tags			admin, users
+//	@Produce		json
+//	@Param			username path string true "Username"
+//	@Success		204	"The user was deleted"
+//	@Failure		400	{object}	error "Some parameter was either not provided or invalid."
+//	@Failure		404	{object}	error "User not found"
+//	@Failure		500	{object}	error "Something went wrong on the server"
+//	@Router			/users/{username} [delete]
+// TODO(maolivera): Implement Hard Delete user
+*/
+
+// Update User godoc
+//
+//	@Summary		Updates an User
+//	@Description	The user will be updated. In future will require auth.
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Param			username	path		string		true	"Username of user to be modified"
+//	@Param			Email		header		string		false	"New email"
+//	@Param			Username	header		string		false	"New username"
+//	@Param			Password	header		string		false	"New password"
+//	@Param			FirstName	header		string		false	"New first name"
+//	@Param			LastName	header		string		false	"New last name"
+//	@Success		200			{object}	models.User	"New User"
+//	@Failure		404			{object}	error		"User not found"
+//	@Failure		400			{object}	error		"Some parameter was either not provided or invalid."
+//	@Failure		409			{object}	error		"Either email or username already taken"
+//	@Failure		500			{object}	error		"Something went wrong on the server"
+//	@Router			/users/{username} [patch]
 func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
 	type input struct {
 		Email     string `json:"email,omitempty"`
@@ -229,6 +282,8 @@ func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request
 		err = fmt.Errorf("error reading input parameters: %v", err)
 		respondWithError(w, r, http.StatusInternalServerError, err, "")
 	}
+
+	// TODO(maolivera): Validate fields
 
 	currentTime := time.Now().UTC()
 	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}

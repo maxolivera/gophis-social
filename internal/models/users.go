@@ -17,6 +17,12 @@ type User struct {
 	LastName  string    `json:"last_name"`
 }
 
+// Special type for Feed, do not contain CreatedAt, UpdatedAt, Email, FirstName, LastName
+type ReducedUser struct {
+	ID       uuid.UUID `json:"id"`
+	Username string    `json:"username"`
+}
+
 func DBUserToUser(dbUser database.User) User {
 	return User{
 		ID:        dbUser.ID.Bytes,

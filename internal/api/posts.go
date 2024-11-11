@@ -77,6 +77,22 @@ func getPostFromCtx(r *http.Request) *models.Post {
 	return r.Context().Value("post").(*models.Post)
 }
 
+// Create Post godoc
+//
+//	@Summary		Creates a post
+//	@Description	Logged user (currently passed as user_id on headers, in future with auth) will publicate a post
+//	@Tags			posts
+//	@Accept			json
+//	@Produce		json
+//	@Param			userID	header		uuid	true	"User ID that will publicate the post"
+//	@Param			title	header		string	true	"Title of the post. Cannot be empty or longer than 200 characters"
+//	@Param			content	header		string	true	"Content of the post. Cannot be empty or longer than 1000 characters"
+//	@Param			tags	header		string	false	"Tags"
+//	@Success		200		{object}	models.Post
+//	@Failure		500		{object}	error	"Something went wrong on the server"
+//	@Failure		400		{object}	error	"Some parameter was either not provided or is invalid (e.g. title too long)"
+//	@Security		ApiKeyAuth
+//	@Router			/posts [post]
 func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request) {
 	// types for JSON's input and output
 	type input struct {
@@ -139,7 +155,7 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 	}
 
 	// store user
-	post, err := app.Database.CreatePost(
+	dbPost, err := app.Database.CreatePost(
 		r.Context(),
 		postParams,
 	)
@@ -149,22 +165,40 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Marshal response
-	out := output{}
-	out.CreatedAt = post.CreatedAt.Time
-	out.Title = post.Title
-	out.ID = post.ID.Bytes
+	post := models.DBPostToPost(dbPost)
 
 	// Send response
-	respondWithJSON(w, http.StatusOK, out)
+	respondWithJSON(w, http.StatusOK, post)
 }
 
+// Get Post godoc
+//
+//	@Summary		Fetch a post
+//	@Description	Logged user (currently passed as user_id on headers, in future with auth) will publicate a post
+//	@Tags			posts
+//	@Produce		json
+//	@Param			postID	path		uuid	true	"Post ID"
+//	@Success		200		{object}	models.Post
+//	@Failure		404		{object}	error	"Post not found"
+//	@Failure		500		{object}	error	"Something went wrong on the server"
+//	@Router			/posts/{postID} [get]
 func (app *Application) handlerGetPost(w http.ResponseWriter, r *http.Request) {
 	post := getPostFromCtx(r)
 
 	respondWithJSON(w, http.StatusOK, post)
 }
 
+// Soft Delete Post godoc
+//
+//	@Summary		Soft Deletes a Post
+//	@Description	The post will be marked as "deleted" on the database, it will not appear in any feed nor it can be accessed, but it will not be deleted from the database
+//	@Tags			posts
+//	@Produce		json
+//	@Param			postID	path	uuid	true	"Post ID"
+//	@Success		204		"The post was deleted"
+//	@Failure		404		{object}	error	"Post not found"
+//	@Failure		500		{object}	error	"Something went wrong on the server"
+//	@Router			/posts/{postID} [delete]
 func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Request) {
 	post := getPostFromCtx(r)
 	pgID := pgtype.UUID{
@@ -198,6 +232,17 @@ func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Req
 	respondWithJSON(w, http.StatusNoContent, nil)
 }
 
+// Hard Delete Post godoc
+//
+//	@Summary		Hard Deletes a Post
+//	@Description	The post will be deleted. Currently not used.
+//	@Tags			posts, admin
+//	@Produce		json
+//	@Param			postID	path	uuid	true	"Post ID"
+//	@Success		204		"The post was deleted"
+//	@Failure		404		{object}	error	"Post not found"
+//	@Failure		500		{object}	error	"Something went wrong on the server"
+//	@Router			/admin/posts/{postID} [delete]
 func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Request) {
 	post := getPostFromCtx(r)
 	pgID := pgtype.UUID{
@@ -223,9 +268,23 @@ func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, nil)
+	respondWithJSON(w, http.StatusNoContent, nil)
 }
 
+// Update Post godoc
+//
+//	@Summary		Updates a Post
+//	@Description	The post will be updated. In future will require auth.
+//	@Tags			posts
+//	@Produce		json
+//	@Param			postID	path		uuid		true	"Post ID"
+//	@Param			content	header		string		false	"New content"
+//	@Param			title	header		string		false	"New title"
+//	@Param			tags	header		string		false	"New tags"
+//	@Success		200		{object}	models.Post	"New Post"
+//	@Failure		404		{object}	error		"Post not found"
+//	@Failure		500		{object}	error		"Something went wrong on the server"
+//	@Router			/posts/{postID} [patch]
 func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request) {
 	type input struct {
 		Content string   `json:"content,omitempty"`
@@ -258,6 +317,7 @@ func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request
 	newDBPost, err := app.Database.UpdatePost(r.Context(), params)
 	if err != nil {
 		switch err {
+		// NOTE(maolivera): Considering that already retrieving with `getPostFromCtx`, is unlikely that this will happen.
 		case pgx.ErrNoRows:
 			respondWithError(w, r, http.StatusNotFound, err, "post not found")
 		default:

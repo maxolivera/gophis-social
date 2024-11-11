@@ -26,14 +26,19 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	apiUrl, err := env.GetString("EXTERNAL_URL")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	environment, err := env.GetString("ENV")
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	dbUrl, err := env.GetString("DB_URL")
-	if dbUrl == "" {
-		log.Fatalln("could not find DB_URL environment value")
+	if err != nil {
+		log.Fatalln(err)
 	}
 	log.Println("Databse url found", dbUrl)
 
@@ -58,6 +63,7 @@ func main() {
 		Addr:        addr,
 		Environment: environment,
 		Version:     Version,
+		ApiUrl:      apiUrl,
 		Database: &api.DBConfig{
 			Addr:               dbUrl,
 			MaxOpenConnections: maxOpenConns,

@@ -1,13 +1,16 @@
 package api
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/maxolivera/gophis-social-network/docs"
 	"github.com/maxolivera/gophis-social-network/internal/database"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 type Application struct {
@@ -20,6 +23,7 @@ type Config struct {
 	Database    *DBConfig
 	Environment string
 	Version     string
+	ApiUrl      string
 }
 
 type DBConfig struct {
@@ -29,6 +33,12 @@ type DBConfig struct {
 	MaxIdleTime        time.Duration
 }
 
+//	@title			Gophis Social API
+//	@description	API for Gophis Social, the best and simplest Social Network
+
+// @securityDefinitions.apikey	ApiKeyAuth
+// @in							header
+// @name						Authorization
 func (app *Application) Start() error {
 	mux := app.GetHandlers()
 
@@ -40,7 +50,7 @@ func (app *Application) Start() error {
 		IdleTimeout:  time.Minute,
 	}
 
-	// TODO(maxolivera): Change to structured logging
+	// TODO(maolivera): Change to structured logging
 	log.Printf("starting to listen at %s", app.Config.Addr)
 
 	return srv.ListenAndServe()
@@ -57,11 +67,19 @@ func (app *Application) GetHandlers() http.Handler {
 	// timeout on reuqest context
 	r.Use(middleware.Timeout(60 * time.Second))
 
+	// == API DOCS ==
+	docsURL := fmt.Sprintf("%s/swagger/doc.json", app.Config.Addr)
+	docs.SwaggerInfo.Version = app.Config.Version
+	docs.SwaggerInfo.Host = app.Config.ApiUrl
+	docs.SwaggerInfo.BasePath = "/v2"
+
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/healthz", app.handlerHealthz)
+		r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL(docsURL)))
 
 		// TODO(maolivera): Add timeout within context
 		r.Route("/users", func(r chi.Router) {
+			// TODO(maolivera): Change / to be directly the base path (not under "/"), if authenticated
 			r.Post("/", app.handlerCreateUser)
 
 			r.Route("/{username}", func(r chi.Router) {

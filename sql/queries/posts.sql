@@ -1,7 +1,7 @@
 -- name: CreatePost :one
 INSERT INTO posts (id, created_at, updated_at, user_id, title, content, tags)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, created_at, title;
+RETURNING *;
 
 -- name: HardDeletePostByID :one
 DELETE FROM posts WHERE id = $1 and version = $2 RETURNING *;

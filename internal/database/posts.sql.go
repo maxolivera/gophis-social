@@ -14,7 +14,7 @@ import (
 const createPost = `-- name: CreatePost :one
 INSERT INTO posts (id, created_at, updated_at, user_id, title, content, tags)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, created_at, title
+RETURNING id, created_at, updated_at, title, content, user_id, tags, is_deleted, version
 `
 
 type CreatePostParams struct {
@@ -27,13 +27,7 @@ type CreatePostParams struct {
 	Tags      []string
 }
 
-type CreatePostRow struct {
-	ID        pgtype.UUID
-	CreatedAt pgtype.Timestamp
-	Title     string
-}
-
-func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (CreatePostRow, error) {
+func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, error) {
 	row := q.db.QueryRow(ctx, createPost,
 		arg.ID,
 		arg.CreatedAt,
@@ -43,8 +37,18 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (CreateP
 		arg.Content,
 		arg.Tags,
 	)
-	var i CreatePostRow
-	err := row.Scan(&i.ID, &i.CreatedAt, &i.Title)
+	var i Post
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Title,
+		&i.Content,
+		&i.UserID,
+		&i.Tags,
+		&i.IsDeleted,
+		&i.Version,
+	)
 	return i, err
 }
 

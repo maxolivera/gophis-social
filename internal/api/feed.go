@@ -9,9 +9,25 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/maxolivera/gophis-social-network/internal/database"
+	"github.com/maxolivera/gophis-social-network/internal/models"
 	// "github.com/maxolivera/gophis-social-network/internal/models"
 )
 
+// Feed godoc
+//
+//	@Summary		Fetches the feed for current user
+//	@Description	Fetches the feed for user_id (now, passed as payload, in future by authentication
+//	@tags			feed
+//	@Accept			json
+//	@Produce		json
+//	@Param			user_id	header		uuid	true	"User ID"
+//	@Param			sort	header		bool	false	"Sort, true if descending order"
+//	@Param			limit	header		int32	false	"Limit, 20 by default"
+//	@Param			offset	header		int32	false	"Offset, 0 by default"
+//	@Success		200		{object}	[]models.Feed
+//	@Failure		500		{object}	error
+//	@Security		ApiKeyAuth
+//	@Router			/v1/ [get]
 func (app *Application) handlerFeed(w http.ResponseWriter, r *http.Request) {
 	// TODO(maolivera): Change to auth
 	ctx := r.Context()
@@ -48,9 +64,7 @@ func (app *Application) handlerFeed(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
-	respondWithJSON(w, http.StatusOK, dbFeed)
 
-	/*
 	feed, err := models.DBFeedsToFeeds(dbFeed)
 	if err != nil {
 		err = fmt.Errorf("error during parsing: %v", err)
@@ -59,5 +73,4 @@ func (app *Application) handlerFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, http.StatusOK, feed)
-	*/
 }

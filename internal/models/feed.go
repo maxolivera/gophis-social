@@ -11,13 +11,13 @@ import (
 // TODO(maolivera): Better struct to not send empty fields on User
 
 type Feed struct {
-	ID           uuid.UUID `json:"id"`
-	Title        string    `json:"title"`
-	Content      string    `json:"content"`
-	CreatedAt    time.Time `json:"created_at"`
-	Tags         []string  `json:"tags"`
-	Author       User      `json:"author"`
-	CommentCount int64     `json:"comment_count"`
+	ID           uuid.UUID   `json:"id"`
+	Title        string      `json:"title"`
+	Content      string      `json:"content"`
+	CreatedAt    time.Time   `json:"created_at"`
+	Tags         []string    `json:"tags"`
+	Author       ReducedUser `json:"author"`
+	CommentCount int64       `json:"comment_count"`
 }
 
 func DBFeedRowToFeed(row any) (Feed, error) {
@@ -29,7 +29,7 @@ func DBFeedRowToFeed(row any) (Feed, error) {
 			CreatedAt:    v.CreatedAt.Time,
 			Content:      v.Content,
 			Tags:         v.Tags,
-			Author:       User{ID: v.AuthorID.Bytes, Username: v.Username.String},
+			Author:       ReducedUser{ID: v.AuthorID.Bytes, Username: v.Username.String},
 			CommentCount: v.CommentCount,
 		}, nil
 	case database.SearchPostsRow:
@@ -39,7 +39,7 @@ func DBFeedRowToFeed(row any) (Feed, error) {
 			CreatedAt:    v.CreatedAt.Time,
 			Content:      v.Content,
 			Tags:         v.Tags,
-			Author:       User{ID: v.AuthorID.Bytes, Username: v.Username.String},
+			Author:       ReducedUser{ID: v.AuthorID.Bytes, Username: v.Username.String},
 			CommentCount: v.CommentCount,
 		}, nil
 	default:

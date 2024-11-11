@@ -9,12 +9,9 @@ It's started as a project to follows [SelfMadeEngineer](www.skool.com/self-made-
 ### Used
 
 - Go 1.22
-
-### To be used
-
 - Docker
 - Postgres running on Docker
-- Swagger for docs
+- Swagger for documentation. Which requires [swag](https://github.com/swaggo/swag).
 
 ## Others concepts applied
 
@@ -22,9 +19,10 @@ It's started as a project to follows [SelfMadeEngineer](www.skool.com/self-made-
 
 ## Possible futures changes
 
-- [ ] Use HTTP 3 as default and use fallback mechanisms to set HTTP 2 and 1.1.
+- [ ] Support HTTP 2
 - [ ] Replace `chi` with own implementation.
 
-## TODO
+## Planned changes
 
-- [ ] Better queries
+- [x] Use of indexes
+- [ ] Change `is_deleted` to `deleted_at` on the database.
