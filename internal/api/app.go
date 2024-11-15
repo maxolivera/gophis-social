@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -11,11 +10,13 @@ import (
 	"github.com/maxolivera/gophis-social-network/docs"
 	"github.com/maxolivera/gophis-social-network/internal/database"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
+	"go.uber.org/zap"
 )
 
 type Application struct {
 	Config   *Config
 	Database *database.Queries
+	Logger   *zap.SugaredLogger
 }
 
 type Config struct {
@@ -50,8 +51,7 @@ func (app *Application) Start() error {
 		IdleTimeout:  time.Minute,
 	}
 
-	// TODO(maolivera): Change to structured logging
-	log.Printf("starting to listen at %s", app.Config.Addr)
+	app.Logger.Infow("server has started", "addr", app.Config.Addr, "env", app.Config.Environment)
 
 	return srv.ListenAndServe()
 }
@@ -71,7 +71,7 @@ func (app *Application) GetHandlers() http.Handler {
 	docsURL := fmt.Sprintf("%s/swagger/doc.json", app.Config.Addr)
 	docs.SwaggerInfo.Version = app.Config.Version
 	docs.SwaggerInfo.Host = app.Config.ApiUrl
-	docs.SwaggerInfo.BasePath = "/v2"
+	docs.SwaggerInfo.BasePath = "/v1"
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/healthz", app.handlerHealthz)

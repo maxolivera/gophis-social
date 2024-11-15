@@ -36,13 +36,13 @@ func (app *Application) handlerFollowUser(w http.ResponseWriter, r *http.Request
 
 	if err := readJSON(w, r, in); err != nil {
 		err = fmt.Errorf("error during follower username unmarshal: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 	follower, err := app.Database.GetUserByUsername(ctx, in.Username)
 	if err != nil {
 		err = fmt.Errorf("error during follower retrieve: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 	// ==
@@ -62,11 +62,11 @@ func (app *Application) handlerFollowUser(w http.ResponseWriter, r *http.Request
 
 	if err := app.Database.FollowByID(ctx, params); err != nil {
 		err = fmt.Errorf("error during following user: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
-	respondWithJSON(w, http.StatusNoContent, nil)
+	app.respondWithJSON(w, r, http.StatusNoContent, nil)
 }
 
 // Unfollow godoc
@@ -94,13 +94,13 @@ func (app *Application) handlerUnfollowUser(w http.ResponseWriter, r *http.Reque
 
 	if err := readJSON(w, r, in); err != nil {
 		err = fmt.Errorf("error during follower username unmarshal: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 	follower, err := app.Database.GetUserByUsername(ctx, in.Username)
 	if err != nil {
 		err = fmt.Errorf("error during follower retrieve: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 	// ==
@@ -117,7 +117,7 @@ func (app *Application) handlerUnfollowUser(w http.ResponseWriter, r *http.Reque
 
 	if err := app.Database.UnfollowByID(ctx, params); err != nil {
 		err = fmt.Errorf("error during following user: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 }

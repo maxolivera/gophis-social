@@ -23,14 +23,14 @@ func (app *Application) middlewarePostContext(next http.Handler) http.Handler {
 		if idStr == "" {
 			err := fmt.Errorf("post_id not provided")
 			// TODO(maolivera): maybe another message?
-			respondWithError(w, r, http.StatusBadRequest, err, err.Error())
+			app.respondWithError(w, r, http.StatusBadRequest, err, err.Error())
 			return
 		}
 
 		id, err := uuid.Parse(idStr)
 		if err != nil {
 			err := fmt.Errorf("post_id not valid: %v", err)
-			respondWithError(w, r, http.StatusBadRequest, err, "post not found")
+			app.respondWithError(w, r, http.StatusBadRequest, err, "post not found")
 			return
 		}
 
@@ -48,9 +48,9 @@ func (app *Application) middlewarePostContext(next http.Handler) http.Handler {
 			switch err {
 			case pgx.ErrNoRows:
 				err := fmt.Errorf("post_id not found: %v", err)
-				respondWithError(w, r, http.StatusNotFound, err, "post not found")
+				app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
 			default:
-				respondWithError(w, r, http.StatusInternalServerError, err, "")
+				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			}
 			return
 		}
@@ -60,7 +60,7 @@ func (app *Application) middlewarePostContext(next http.Handler) http.Handler {
 			case pgx.ErrNoRows:
 			// TODO(maolivera): maybe add logging? but seems uncessary to add logs if no comments found
 			default:
-				respondWithError(w, r, http.StatusInternalServerError, err, "")
+				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			}
 			return
 		}
@@ -110,24 +110,24 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 
 	if err := readJSON(w, r, &in); err != nil {
 		err := fmt.Errorf("error during JSON decoding: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
 	// check if some parameter was null
 	if in.Title == "" || in.Content == "" {
 		err := fmt.Errorf("title and content are required: %s\n", in)
-		respondWithError(w, r, http.StatusBadRequest, err, "something is missing")
+		app.respondWithError(w, r, http.StatusBadRequest, err, "something is missing")
 		return
 	}
 	if len(in.Title) > MAX_TITLE_LENGTH {
 		err := fmt.Errorf("title is too long, max is %d vs. current %d", MAX_TITLE_LENGTH, len(in.Title))
-		respondWithError(w, r, http.StatusBadRequest, err, "title is too long")
+		app.respondWithError(w, r, http.StatusBadRequest, err, "title is too long")
 		return
 	}
 	if len(in.Content) > MAX_CONTENT_LENGTH {
 		err := fmt.Errorf("content is too long, max is %d vs. current %d", MAX_CONTENT_LENGTH, len(in.Content))
-		respondWithError(w, r, http.StatusBadRequest, err, "content is too long")
+		app.respondWithError(w, r, http.StatusBadRequest, err, "content is too long")
 		return
 	}
 
@@ -161,14 +161,14 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 	)
 	if err != nil {
 		err := fmt.Errorf("error during user creation: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
 	post := models.DBPostToPost(dbPost)
 
 	// Send response
-	respondWithJSON(w, http.StatusOK, post)
+	app.respondWithJSON(w, r, http.StatusOK, post)
 }
 
 // Get Post godoc
@@ -185,7 +185,7 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 func (app *Application) handlerGetPost(w http.ResponseWriter, r *http.Request) {
 	post := getPostFromCtx(r)
 
-	respondWithJSON(w, http.StatusOK, post)
+	app.respondWithJSON(w, r, http.StatusOK, post)
 }
 
 // Soft Delete Post godoc
@@ -216,20 +216,20 @@ func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Req
 		switch err {
 		case pgx.ErrNoRows:
 			err := fmt.Errorf("post was not deleted because was not found post_id: %v", post.ID)
-			respondWithError(w, r, http.StatusNotFound, err, "post not found")
+			app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
 		default:
 			err := fmt.Errorf("post could not deleted: %v", err)
-			respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
 		}
 		return
 	}
 	if !deleted {
 		err := fmt.Errorf("post was not deleted, post_id: %v", post.ID)
-		respondWithError(w, r, http.StatusNotFound, err, "post not found")
+		app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
 		return
 	}
 
-	respondWithJSON(w, http.StatusNoContent, nil)
+	app.respondWithJSON(w, r, http.StatusNoContent, nil)
 }
 
 // Hard Delete Post godoc
@@ -260,15 +260,15 @@ func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Req
 		switch err {
 		case pgx.ErrNoRows:
 			err := fmt.Errorf("post not deleted, not found, post id: %v error: %v", post.ID, err)
-			respondWithError(w, r, http.StatusNotFound, err, "post not found")
+			app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
 		default:
 			err := fmt.Errorf("post could not deleted: %v", err)
-			respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusNoContent, nil)
+	app.respondWithJSON(w, r, http.StatusNoContent, nil)
 }
 
 // Update Post godoc
@@ -296,7 +296,7 @@ func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request
 	in := input{}
 	if err := readJSON(w, r, &in); err != nil {
 		err = fmt.Errorf("error reading input parameters: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 	}
 
 	currentTime := time.Now().UTC()
@@ -319,14 +319,14 @@ func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request
 		switch err {
 		// NOTE(maolivera): Considering that already retrieving with `getPostFromCtx`, is unlikely that this will happen.
 		case pgx.ErrNoRows:
-			respondWithError(w, r, http.StatusNotFound, err, "post not found")
+			app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
 		default:
 			err := fmt.Errorf("post could not updated: %v", err)
-			respondWithError(w, r, http.StatusInternalServerError, err, "")
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		}
 		return
 	}
 	newPost := models.DBPostToPost(newDBPost)
 
-	respondWithJSON(w, http.StatusOK, newPost)
+	app.respondWithJSON(w, r, http.StatusOK, newPost)
 }

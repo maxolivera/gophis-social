@@ -23,5 +23,5 @@ func (app *Application) handlerHealthz(w http.ResponseWriter, r *http.Request) {
 		Version: app.Config.Version,
 	}
 
-	respondWithJSON(w, http.StatusOK, res)
+	app.respondWithJSON(w, r, http.StatusOK, res)
 }

@@ -2,27 +2,28 @@ package env
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
+
+	"go.uber.org/zap"
 )
 
-func GetString(key string) (string, error) {
+func GetString(key string, logger *zap.SugaredLogger) (string, error) {
 	value := os.Getenv(key)
 	if value == "" {
-		return "", fmt.Errorf("could not find environment value: ", key)
+		return "", fmt.Errorf("could not find environment value: %v", key)
 	}
-	log.Printf("found value for %s environment value\n", key)
+	logger.Debugf("found value for %s environment value\n", key)
 
 	return value, nil
 }
 
-func GetInt(key string) (int, error) {
+func GetInt(key string, logger *zap.SugaredLogger) (int, error) {
 	valueStr := os.Getenv(key)
 	if valueStr == "" {
-		return 0, fmt.Errorf("could not find environment value: ", key)
+		return 0, fmt.Errorf("could not find environment value: %v", key)
 	}
-	log.Printf("found value for %s environment value\n", key)
+	logger.Debugf("found value for %s environment value\n", key)
 
 	value, err := strconv.Atoi(valueStr)
 	if err != nil {

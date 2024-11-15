@@ -22,7 +22,7 @@ func (app *Application) middlewareUserContext(next http.Handler) http.Handler {
 		if username == "" {
 			err := fmt.Errorf("username not provided")
 			// TODO(maolivera): maybe another message?
-			respondWithError(w, r, http.StatusBadRequest, err, err.Error())
+			app.respondWithError(w, r, http.StatusBadRequest, err, err.Error())
 			return
 		}
 
@@ -35,15 +35,15 @@ func (app *Application) middlewareUserContext(next http.Handler) http.Handler {
 			switch err {
 			case pgx.ErrNoRows:
 				err := fmt.Errorf("username not found: %v", err)
-				respondWithError(w, r, http.StatusNotFound, err, "user not found")
+				app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
 			default:
-				respondWithError(w, r, http.StatusInternalServerError, err, "")
+				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			}
 			return
 		}
 		user := models.DBUserToUser(dbUser)
 
-		ctx = context.WithValue(ctx, "user", &user)
+		ctx = context.WithValue(ctx, "user", user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -82,7 +82,7 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 
 	if err := readJSON(w, r, &in); err != nil {
 		err := fmt.Errorf("error reading JSON when creating a user: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
@@ -91,7 +91,7 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 	// NOTE(maolivera): should also check password standards or only leave it on client side?
 	if in.Username == "" || in.Email == "" || in.Password == "" {
 		err := fmt.Errorf("username, email, and password are required: %s\n", in)
-		respondWithError(w, r, http.StatusBadRequest, err, "something is missing")
+		app.respondWithError(w, r, http.StatusBadRequest, err, "something is missing")
 		return
 	}
 
@@ -108,7 +108,7 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 	hashed, err := bcrypt.GenerateFromPassword([]byte(in.Password), 14)
 	if err != nil {
 		err := fmt.Errorf("error when hashing password: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
@@ -143,12 +143,12 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 			case "users_username_key":
 				msg := "username not available"
 				err = fmt.Errorf("%s: %v", msg, err)
-				respondWithError(w, r, http.StatusConflict, err, msg)
+				app.respondWithError(w, r, http.StatusConflict, err, msg)
 				return
 			case "users_email_key":
 				msg := "email not available"
 				err = fmt.Errorf("%s: %v", msg, err)
-				respondWithError(w, r, http.StatusConflict, err, msg)
+				app.respondWithError(w, r, http.StatusConflict, err, msg)
 				return
 			default:
 				err = fmt.Errorf("error during user creation: %v", err)
@@ -156,14 +156,14 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 		} else {
 			err = fmt.Errorf("error during user creation: %v", err)
 		}
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
 	user := models.DBUserToUser(dbUser)
 
 	// Send response
-	respondWithJSON(w, http.StatusOK, user)
+	app.respondWithJSON(w, r, http.StatusOK, user)
 }
 
 // Get User godoc
@@ -188,7 +188,7 @@ func (app *Application) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 		CreatedAt time.Time `json:"created_at"`
 	}
 	user := getUserFromCtx(r)
-	respondWithJSON(w, http.StatusOK, user)
+	app.respondWithJSON(w, r, http.StatusOK, user)
 }
 
 // Soft Delete User godoc
@@ -216,20 +216,20 @@ func (app *Application) handlerSoftDeleteUser(w http.ResponseWriter, r *http.Req
 		switch err {
 		case pgx.ErrNoRows:
 			err := fmt.Errorf("user was not deleted because was not found, user_id: %v", user.ID)
-			respondWithError(w, r, http.StatusNotFound, err, "user not found")
+			app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
 		default:
 			err := fmt.Errorf("user could not deleted: %v", err)
-			respondWithError(w, r, http.StatusInternalServerError, err, "user could not be deleted")
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "user could not be deleted")
 		}
 		return
 	}
 	if !deleted {
 		err := fmt.Errorf("user was not deleted, post_id: %v", user.ID)
-		respondWithError(w, r, http.StatusNotFound, err, "user not found")
+		app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
 		return
 	}
 
-	respondWithJSON(w, http.StatusNoContent, nil)
+	app.respondWithJSON(w, r, http.StatusNoContent, nil)
 }
 
 /*
@@ -280,7 +280,7 @@ func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request
 	in := input{}
 	if err := readJSON(w, r, &in); err != nil {
 		err = fmt.Errorf("error reading input parameters: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 	}
 
 	// TODO(maolivera): Validate fields
@@ -297,7 +297,7 @@ func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request
 		hashed, err := bcrypt.GenerateFromPassword([]byte(in.Password), 14)
 		if err != nil {
 			err := fmt.Errorf("error when hashing password: %v", err)
-			respondWithError(w, r, http.StatusInternalServerError, err, "")
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			return
 		}
 		pgPassword = hashed
@@ -323,28 +323,28 @@ func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request
 			case "users_username_key":
 				msg := "username not available"
 				err = fmt.Errorf("%s: %v", msg, err)
-				respondWithError(w, r, http.StatusConflict, err, msg)
+				app.respondWithError(w, r, http.StatusConflict, err, msg)
 			case "users_email_key":
 				msg := "email not available"
 				err = fmt.Errorf("%s: %v", msg, err)
-				respondWithError(w, r, http.StatusConflict, err, msg)
+				app.respondWithError(w, r, http.StatusConflict, err, msg)
 			default:
 				msg := "something went wrong"
 				err = fmt.Errorf("%s: %v", msg, err)
-				respondWithError(w, r, http.StatusConflict, err, msg)
+				app.respondWithError(w, r, http.StatusConflict, err, msg)
 			}
 			return
 		}
 		switch err {
 		case pgx.ErrNoRows:
-			respondWithError(w, r, http.StatusNotFound, err, "user not found")
+			app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
 		default:
 			err := fmt.Errorf("post could not updated: %v", err)
-			respondWithError(w, r, http.StatusInternalServerError, err, "")
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		}
 		return
 	}
 	newUser := models.DBUserToUser(newDBUser)
 
-	respondWithJSON(w, http.StatusOK, newUser)
+	app.respondWithJSON(w, r, http.StatusOK, newUser)
 }

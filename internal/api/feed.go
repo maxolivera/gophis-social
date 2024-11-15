@@ -44,7 +44,7 @@ func (app *Application) handlerFeed(w http.ResponseWriter, r *http.Request) {
 	in := input{}
 	if err := readJSON(w, r, &in); err != nil {
 		err := fmt.Errorf("error when reading feed parameters payload: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
@@ -61,16 +61,16 @@ func (app *Application) handlerFeed(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// TODO(maolivera): Better error messages and HTTP responses
 		err := fmt.Errorf("error retrieving feed for user_id %v, err: %v", in.UserID, err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
 	feed, err := models.DBFeedsToFeeds(dbFeed)
 	if err != nil {
 		err = fmt.Errorf("error during parsing: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, feed)
+	app.respondWithJSON(w, r, http.StatusOK, feed)
 }

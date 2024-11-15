@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -73,7 +72,9 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 		var err error
 		since, err = time.Parse("2006-01-02", sinceStr)
 		if err != nil {
-			log.Printf("could not parse date: %v\n", err)
+			err = fmt.Errorf("could not parse date: %v\n", err)
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+			return
 		}
 		params.Since = pgtype.Timestamp{Time: since}
 	}
@@ -83,7 +84,9 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 		var err error
 		until, err = time.Parse("2006-01-02", untilStr)
 		if err != nil {
-			log.Printf("could not parse date: %v\n", err)
+			err = fmt.Errorf("could not parse date: %v\n", err)
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+			return
 		}
 		params.Until = pgtype.Timestamp{Time: until}
 	}
@@ -93,7 +96,9 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 	if limitStr != "" {
 		limit, err := strconv.Atoi(limitStr)
 		if err != nil {
-			log.Printf("could not parse limit into int: %v", err)
+			err = fmt.Errorf("could not parse limit into int: %v", err)
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+			return
 		} else {
 			if limit >= 20 {
 				limit = 20
@@ -107,7 +112,9 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 	if offsetStr != "" {
 		offset, err := strconv.Atoi(offsetStr)
 		if err != nil {
-			log.Printf("could not parse limit into int: %v", err)
+			err = fmt.Errorf("could not parse limit into int: %v", err)
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+			return
 		} else {
 			params.Offset = int32(offset)
 		}
@@ -133,10 +140,10 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 		switch err {
 		case pgx.ErrNoRows:
 			err = fmt.Errorf("no rows: %v", err)
-			respondWithError(w, r, http.StatusNotFound, err, "no posts with these parameters")
+			app.respondWithError(w, r, http.StatusNotFound, err, "no posts with these parameters")
 		default:
 			err = fmt.Errorf("error when retrieving posts with filter parameters %v, err: %v", params, err)
-			respondWithError(w, r, http.StatusInternalServerError, err, "")
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		}
 		return
 	}
@@ -144,9 +151,9 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 	feed, err := models.DBFeedsToFeeds(dbFeed)
 	if err != nil {
 		err = fmt.Errorf("error during parsing: %v", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, feed)
+	app.respondWithJSON(w, r, http.StatusOK, feed)
 }

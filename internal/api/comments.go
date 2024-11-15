@@ -28,23 +28,23 @@ func (app *Application) handlerCreateComment(w http.ResponseWriter, r *http.Requ
 	in := input{}
 
 	if err := readJSON(w, r, &in); err != nil {
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 	// validate
 	if len(in.Content) > MAX_CONTENT_LENGTH {
 		err := fmt.Errorf("content is too long, max is %d vs. current %d", MAX_CONTENT_LENGTH, len(in.Content))
-		respondWithError(w, r, http.StatusBadRequest, err, "content is too long")
+		app.respondWithError(w, r, http.StatusBadRequest, err, "content is too long")
 		return
 	}
 	if in.UserID == uuid.Nil {
 		err := fmt.Errorf("user_id not provided, input: %v", in)
-		respondWithError(w, r, http.StatusBadRequest, err, "not authenticated")
+		app.respondWithError(w, r, http.StatusBadRequest, err, "not authenticated")
 		return
 	}
 	if in.PostID == uuid.Nil {
 		err := fmt.Errorf("post_id not provided, input: %v", in)
-		respondWithError(w, r, http.StatusBadRequest, err, "invalid post")
+		app.respondWithError(w, r, http.StatusBadRequest, err, "invalid post")
 		return
 	}
 
@@ -80,7 +80,7 @@ func (app *Application) handlerCreateComment(w http.ResponseWriter, r *http.Requ
 	)
 	if err != nil {
 		err := fmt.Errorf("error during comment creation: ", err)
-		respondWithError(w, r, http.StatusInternalServerError, err, "")
+		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 	out := output{
@@ -92,5 +92,5 @@ func (app *Application) handlerCreateComment(w http.ResponseWriter, r *http.Requ
 		CreatedAt: comment.CreatedAt.Time,
 	}
 
-	respondWithJSON(w, http.StatusOK, out)
+	app.respondWithJSON(w, r, http.StatusOK, out)
 }
