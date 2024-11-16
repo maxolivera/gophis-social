@@ -23,11 +23,16 @@ func (app *Application) respondWithJSON(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	app.Logger.Infow("sending HTTP response", "http_code", code, "method", r.Method, "path", r.URL.Path)
-	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(data)
 
-	return
+	if code != http.StatusNoContent {
+		w.Header().Add("Content-Type", "application/json")
+	}
+
+	w.WriteHeader(code)
+
+	if code != http.StatusNoContent {
+		w.Write(data)
+	}
 }
 
 // Will sent a response to the client with code `code` and message `message`, and will log the error `err`
@@ -54,6 +59,7 @@ func (app *Application) respondWithError(w http.ResponseWriter, r *http.Request,
 	} else {
 		res.Error.Message = message
 	}
+	app.Logger.Errorw("there was an error", "http_code", code, "method", r.Method, "path", r.URL.Path, "error", err.Error())
 
 	app.respondWithJSON(w, r, code, res)
 }

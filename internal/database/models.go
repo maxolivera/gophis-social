@@ -45,4 +45,11 @@ type User struct {
 	FirstName pgtype.Text
 	LastName  pgtype.Text
 	IsDeleted bool
+	IsActive  bool
+}
+
+type UserInvitation struct {
+	Token     []byte
+	UserID    pgtype.UUID
+	ExpiresAt pgtype.Timestamp
 }

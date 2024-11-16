@@ -1,7 +1,25 @@
 -- name: CreateUser :one
-INSERT INTO users (id, created_at, updated_at, username, email, password, first_name, last_name)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO users (id, created_at, updated_at, username, email, password)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
+
+-- name: CreateInvitation :exec
+INSERT INTO user_invitations (token, user_id, expires_at)
+VALUES ($1, $2, $3);
+
+-- name: GetInvitation :one
+SELECT user_id
+FROM user_invitations
+WHERE token = $1 AND expires_at > $2;
+
+-- name: ActivateUser :exec
+UPDATE users
+SET is_active = true
+WHERE id = $1;
+
+-- name: DeleteToken :exec
+DELETE FROM user_invitations
+WHERE token = $1;
 
 -- name: GetUserByUsername :one
 SELECT * FROM users WHERE username = $1 AND is_deleted = false;

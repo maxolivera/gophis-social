@@ -16,7 +16,8 @@ const Version = "0.0.1"
 
 func main() {
 	// == Logger ==
-	logger := zap.Must(zap.NewProduction()).Sugar()
+	// TODO(maolivera): Change Logger type based on env
+	logger := zap.Must(zap.NewDevelopment()).Sugar()
 	defer logger.Sync()
 
 	// == ENV VALUES ==
@@ -44,6 +45,7 @@ func main() {
 			MaxIdleConnections: maxIdleConns,
 			MaxIdleTime:        time.Duration(time.Duration(maxIdleTime) * time.Minute),
 		},
+		ExpirationTime: 3 * 24 * time.Hour,
 	}
 
 	// == DATABASE ==
@@ -72,6 +74,7 @@ func main() {
 	app := &api.Application{
 		Config:   cfg,
 		Database: queries,
+		Pool:     pool,
 		Logger:   logger,
 	}
 

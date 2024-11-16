@@ -11,10 +11,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateUser = `-- name: ActivateUser :exec
+UPDATE users
+SET is_active = true
+WHERE id = $1
+`
+
+func (q *Queries) ActivateUser(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, activateUser, id)
+	return err
+}
+
+const createInvitation = `-- name: CreateInvitation :exec
+INSERT INTO user_invitations (token, user_id, expires_at)
+VALUES ($1, $2, $3)
+`
+
+type CreateInvitationParams struct {
+	Token     []byte
+	UserID    pgtype.UUID
+	ExpiresAt pgtype.Timestamp
+}
+
+func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) error {
+	_, err := q.db.Exec(ctx, createInvitation, arg.Token, arg.UserID, arg.ExpiresAt)
+	return err
+}
+
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, created_at, updated_at, username, email, password, first_name, last_name)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted
+INSERT INTO users (id, created_at, updated_at, username, email, password)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active
 `
 
 type CreateUserParams struct {
@@ -24,8 +51,6 @@ type CreateUserParams struct {
 	Username  string
 	Email     string
 	Password  []byte
-	FirstName pgtype.Text
-	LastName  pgtype.Text
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -36,8 +61,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.Username,
 		arg.Email,
 		arg.Password,
-		arg.FirstName,
-		arg.LastName,
 	)
 	var i User
 	err := row.Scan(
@@ -50,12 +73,41 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.FirstName,
 		&i.LastName,
 		&i.IsDeleted,
+		&i.IsActive,
 	)
 	return i, err
 }
 
+const deleteToken = `-- name: DeleteToken :exec
+DELETE FROM user_invitations
+WHERE token = $1
+`
+
+func (q *Queries) DeleteToken(ctx context.Context, token []byte) error {
+	_, err := q.db.Exec(ctx, deleteToken, token)
+	return err
+}
+
+const getInvitation = `-- name: GetInvitation :one
+SELECT user_id
+FROM user_invitations
+WHERE token = $1 AND expires_at > $2
+`
+
+type GetInvitationParams struct {
+	Token     []byte
+	ExpiresAt pgtype.Timestamp
+}
+
+func (q *Queries) GetInvitation(ctx context.Context, arg GetInvitationParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getInvitation, arg.Token, arg.ExpiresAt)
+	var user_id pgtype.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted FROM users WHERE username = $1 AND is_deleted = false
+SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active FROM users WHERE username = $1 AND is_deleted = false
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -71,6 +123,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.FirstName,
 		&i.LastName,
 		&i.IsDeleted,
+		&i.IsActive,
 	)
 	return i, err
 }
@@ -99,7 +152,7 @@ SET
 	last_name = coalesce($6, last_name),
 	password = coalesce($7, password)
 WHERE id = $2 AND is_deleted = false
-RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted
+RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active
 `
 
 type UpdateUserParams struct {
@@ -133,6 +186,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.FirstName,
 		&i.LastName,
 		&i.IsDeleted,
+		&i.IsActive,
 	)
 	return i, err
 }

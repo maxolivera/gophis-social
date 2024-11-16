@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/maxolivera/gophis-social-network/docs"
 	"github.com/maxolivera/gophis-social-network/internal/database"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
@@ -15,16 +16,18 @@ import (
 
 type Application struct {
 	Config   *Config
+	Pool     *pgxpool.Pool
 	Database *database.Queries
 	Logger   *zap.SugaredLogger
 }
 
 type Config struct {
-	Addr        string
-	Database    *DBConfig
-	Environment string
-	Version     string
-	ApiUrl      string
+	Addr           string
+	Database       *DBConfig
+	Environment    string
+	Version        string
+	ApiUrl         string
+	ExpirationTime time.Duration
 }
 
 type DBConfig struct {
@@ -64,7 +67,7 @@ func (app *Application) GetHandlers() http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// timeout on reuqest context
+	// timeout on request context
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	// == API DOCS ==
@@ -77,11 +80,13 @@ func (app *Application) GetHandlers() http.Handler {
 		r.Get("/healthz", app.handlerHealthz)
 		r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL(docsURL)))
 
+		// Non-auth routes
+		r.Post("/register", app.handlerCreateUser)
+		r.Post("/activate/{token}", app.handlerActivateUser)
+
+		// Add routes
 		// TODO(maolivera): Add timeout within context
 		r.Route("/users", func(r chi.Router) {
-			// TODO(maolivera): Change / to be directly the base path (not under "/"), if authenticated
-			r.Post("/", app.handlerCreateUser)
-
 			r.Route("/{username}", func(r chi.Router) {
 				r.Use(app.middlewareUserContext)
 
