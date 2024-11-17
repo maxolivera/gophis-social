@@ -28,6 +28,16 @@ type Config struct {
 	Version        string
 	ApiUrl         string
 	ExpirationTime time.Duration
+	Authentication *AuthConfig
+}
+
+type AuthConfig struct {
+	BasicAuth *BasicAuth
+}
+
+type BasicAuth struct {
+	Username string
+	Password string
 }
 
 type DBConfig struct {
@@ -77,7 +87,7 @@ func (app *Application) GetHandlers() http.Handler {
 	docs.SwaggerInfo.BasePath = "/v1"
 
 	r.Route("/v1", func(r chi.Router) {
-		r.Get("/healthz", app.handlerHealthz)
+		r.With(app.middlewareBasicAuth()).Get("/healthz", app.handlerHealthz)
 		r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL(docsURL)))
 
 		// Non-auth routes

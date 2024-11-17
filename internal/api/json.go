@@ -72,3 +72,12 @@ func readJSON(w http.ResponseWriter, r *http.Request, data any) error {
 
 	return decoder.Decode(data)
 }
+
+func (app *Application) unauthorizedBasicErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
+	app.Logger.Warnf("unauthorized basic error", "method", r.Method, "path", r.URL.Path, "error", err.Error())
+
+	// NOTE: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/WWW-Authenticate
+	w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+
+	app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
+}

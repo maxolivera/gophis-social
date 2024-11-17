@@ -29,6 +29,9 @@ func main() {
 	maxOpenConns, err := env.GetInt("DB_MAX_OPEN_CONNS", logger)
 	maxIdleConns, err := env.GetInt("DB_MAX_IDLE_CONNS", logger)
 	maxIdleTime, err := env.GetInt("DB_MAX_IDLE_TIME", logger) // MaxIdleTime represents minutes
+	pass, err := env.GetString("AUTH_BASIC_USER", logger)
+	user, err := env.GetString("AUTH_BASIC_PASS", logger)
+
 	if err != nil {
 		logger.Fatalf("error loading env values: %v\n", err)
 	}
@@ -46,6 +49,12 @@ func main() {
 			MaxIdleTime:        time.Duration(time.Duration(maxIdleTime) * time.Minute),
 		},
 		ExpirationTime: 3 * 24 * time.Hour,
+		Authentication: &api.AuthConfig{
+			BasicAuth: &api.BasicAuth{
+				Username: user,
+				Password: pass,
+			},
+		},
 	}
 
 	// == DATABASE ==
