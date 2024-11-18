@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -15,67 +14,6 @@ import (
 
 const MAX_TITLE_LENGTH = 200
 const MAX_CONTENT_LENGTH = 1000
-
-func (app *Application) middlewarePostContext(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		idStr := r.PathValue("postID")
-		if idStr == "" {
-			err := fmt.Errorf("post_id not provided")
-			// TODO(maolivera): maybe another message?
-			app.respondWithError(w, r, http.StatusBadRequest, err, err.Error())
-			return
-		}
-
-		id, err := uuid.Parse(idStr)
-		if err != nil {
-			err := fmt.Errorf("post_id not valid: %v", err)
-			app.respondWithError(w, r, http.StatusBadRequest, err, "post not found")
-			return
-		}
-
-		pgID := pgtype.UUID{
-			Bytes: id,
-			Valid: true,
-		}
-
-		dbPost, err := app.Database.GetPostById(
-			ctx,
-			pgID,
-		)
-
-		if err != nil {
-			switch err {
-			case pgx.ErrNoRows:
-				err := fmt.Errorf("post_id not found: %v", err)
-				app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
-			default:
-				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-			}
-			return
-		}
-		dbComments, err := app.Database.GetCommentsByPost(r.Context(), dbPost.ID)
-		if err != nil {
-			switch err {
-			case pgx.ErrNoRows:
-			// NOTE(maolivera): It's ok if a post do not have comments
-			default:
-				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-				return
-			}
-		}
-		post := models.DBPostToPost(dbPost)
-		comments := models.DBCommentsWithUser(dbComments)
-		post.Comments = comments
-
-		ctx = context.WithValue(ctx, "post", &post)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func getPostFromCtx(r *http.Request) *models.Post {
-	return r.Context().Value("post").(*models.Post)
-}
 
 type CreatePostPayload struct {
 	Title   string   `json:"title"`
@@ -91,8 +29,6 @@ type CreatePostPayload struct {
 //	@Accept			json
 //	@Produce		json
 //	@Param			Payload	body		CreatePostPayload	true	"Post content"
-//	@Param			content	header		string				true	"Content of the post. Cannot be empty or longer than 1000 characters"
-//	@Param			tags	header		string				false	"Tags"
 //	@Success		200		{object}	models.Post
 //	@Failure		500		{object}	error	"Something went wrong on the server"
 //	@Failure		400		{object}	error	"Some parameter was either not provided or is invalid (e.g. title too long)"
@@ -164,13 +100,14 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 // Get Post godoc
 //
 //	@Summary		Fetch a post
-//	@Description	Logged user (currently passed as user_id on headers, in future with auth) will publicate a post
+//	@Description	Fetch a post
 //	@Tags			posts
 //	@Produce		json
-//	@Param			postID	path		uuid	true	"Post ID"
+//	@Param			postID	path		string	true	"Post ID"
 //	@Success		200		{object}	models.Post
 //	@Failure		404		{object}	error	"Post not found"
 //	@Failure		500		{object}	error	"Something went wrong on the server"
+//	@Security		ApiKeyAuth
 //	@Router			/posts/{postID} [get]
 func (app *Application) handlerGetPost(w http.ResponseWriter, r *http.Request) {
 	post := getPostFromCtx(r)
@@ -188,6 +125,7 @@ func (app *Application) handlerGetPost(w http.ResponseWriter, r *http.Request) {
 //	@Success		204		"The post was deleted"
 //	@Failure		404		{object}	error	"Post not found"
 //	@Failure		500		{object}	error	"Something went wrong on the server"
+//	@Security		ApiKeyAuth
 //	@Router			/posts/{postID} [delete]
 func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Request) {
 	post := getPostFromCtx(r)
@@ -225,14 +163,15 @@ func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Req
 // Hard Delete Post godoc
 //
 //	@Summary		Hard Deletes a Post
-//	@Description	The post will be deleted. Currently not used.
+//	@Description	The post will be deleted. Only for admins.
 //	@Tags			posts, admin
 //	@Produce		json
 //	@Param			postID	path	uuid	true	"Post ID"
 //	@Success		204		"The post was deleted"
 //	@Failure		404		{object}	error	"Post not found"
 //	@Failure		500		{object}	error	"Something went wrong on the server"
-//	@Router			/admin/posts/{postID} [delete]
+//	@Security		ApiKeyAuth
+//	@Router			/posts/{postID}/hard [delete]
 func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Request) {
 	post := getPostFromCtx(r)
 	pgID := pgtype.UUID{
@@ -261,29 +200,29 @@ func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Req
 	app.respondWithJSON(w, r, http.StatusNoContent, nil)
 }
 
+type UpdatePostPayload struct {
+	Title   string   `json:"title,omitempty"`
+	Content string   `json:"content,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+}
+
 // Update Post godoc
 //
 //	@Summary		Updates a Post
 //	@Description	The post will be updated. In future will require auth.
 //	@Tags			posts
 //	@Produce		json
-//	@Param			postID	path		uuid		true	"Post ID"
-//	@Param			content	header		string		false	"New content"
-//	@Param			title	header		string		false	"New title"
-//	@Param			tags	header		string		false	"New tags"
-//	@Success		200		{object}	models.Post	"New Post"
-//	@Failure		404		{object}	error		"Post not found"
-//	@Failure		500		{object}	error		"Something went wrong on the server"
+//	@Param			postID	path		string				true	"Post ID"
+//	@Param			Payload	body		UpdatePostPayload	true	"Updated post payload"
+//	@Success		200		{object}	models.Post			"New Post"
+//	@Failure		404		{object}	error				"Post not found"
+//	@Failure		500		{object}	error				"Something went wrong on the server"
+//	@Security		ApiKeyAuth
 //	@Router			/posts/{postID} [patch]
 func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request) {
-	type input struct {
-		Content string   `json:"content,omitempty"`
-		Title   string   `json:"title,omitempty"`
-		Tags    []string `json:"tags,omitempty"`
-	}
 	post := getPostFromCtx(r)
 
-	in := input{}
+	in := UpdatePostPayload{}
 	if err := readJSON(w, r, &in); err != nil {
 		err = fmt.Errorf("error reading input parameters: %v", err)
 		app.respondWithError(w, r, http.StatusInternalServerError, err, "")

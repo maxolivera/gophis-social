@@ -35,6 +35,13 @@ type Post struct {
 	Version   int32
 }
 
+type Role struct {
+	ID          int32
+	Name        string
+	Level       int32
+	Description string
+}
+
 type User struct {
 	ID        pgtype.UUID
 	CreatedAt pgtype.Timestamp
@@ -46,6 +53,7 @@ type User struct {
 	LastName  pgtype.Text
 	IsDeleted bool
 	IsActive  bool
+	RoleID    int32
 }
 
 type UserInvitation struct {

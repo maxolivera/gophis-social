@@ -9,6 +9,7 @@ const MAX_BYTES = 1_048_578 // 1 MB
 
 // TODO(maolivera): Better functions to return JSON respones, following some kind of standard
 // TODO(maolivera): Respond with JSON should not respond with application/json if code is NoContent
+// TODO(maolivera): Split function into status code
 
 func (app *Application) respondWithJSON(w http.ResponseWriter, r *http.Request, code int, payload any) {
 	data, err := json.Marshal(payload)
@@ -59,7 +60,15 @@ func (app *Application) respondWithError(w http.ResponseWriter, r *http.Request,
 	} else {
 		res.Error.Message = message
 	}
-	app.Logger.Errorw("there was an error", "http_code", code, "method", r.Method, "path", r.URL.Path, "error", err.Error())
+	// Log level based on error type
+	switch code {
+	case http.StatusInternalServerError:
+		app.Logger.Errorw("there was an error", "http_code", code, "method", r.Method, "path", r.URL.Path, "error", err.Error())
+	case http.StatusForbidden:
+		app.Logger.Warnw("trying to access forbidden place", "http_code", code, "method", r.Method, "path", r.URL.Path, "error", err.Error())
+	default:
+		app.Logger.Infow("responding with code > 4xx", "http_code", code, "method", r.Method, "path", r.URL.Path, "error", err.Error())
+	}
 
 	app.respondWithJSON(w, r, code, res)
 }

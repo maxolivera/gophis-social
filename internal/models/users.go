@@ -42,3 +42,18 @@ func DBUsersToUser(dbUsers []database.User) []User {
 	}
 	return users
 }
+
+func DBUserWithRoleToUserAndRole(dbUser database.GetUserByIdRow) (User, ReducedRole) {
+	return User{
+			ID:        dbUser.ID.Bytes,
+			CreatedAt: dbUser.CreatedAt.Time,
+			UpdatedAt: dbUser.UpdatedAt.Time,
+			Email:     dbUser.Email,
+			Username:  dbUser.Username,
+			FirstName: dbUser.FirstName.String,
+			LastName:  dbUser.LastName.String,
+		}, ReducedRole{
+			Level: int(dbUser.Level),
+			Name:  RoleType(dbUser.Name),
+		}
+}

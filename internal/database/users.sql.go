@@ -41,7 +41,7 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, created_at, updated_at, username, email, password)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active
+RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active, role_id
 `
 
 type CreateUserParams struct {
@@ -74,6 +74,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.LastName,
 		&i.IsDeleted,
 		&i.IsActive,
+		&i.RoleID,
 	)
 	return i, err
 }
@@ -107,7 +108,7 @@ func (q *Queries) GetInvitation(ctx context.Context, arg GetInvitationParams) (p
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active FROM users
+SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active, role_id FROM users
 WHERE email = $1
 	AND is_deleted = false
 	AND is_active = true
@@ -127,20 +128,40 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.LastName,
 		&i.IsDeleted,
 		&i.IsActive,
+		&i.RoleID,
 	)
 	return i, err
 }
 
 const getUserById = `-- name: GetUserById :one
-SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active FROM users
-WHERE id = $1
+SELECT
+	u.id, u.created_at, u.updated_at, u.username, u.email, u.password, u.first_name, u.last_name, u.is_deleted, u.is_active, u.role_id, r.level, r.name
+FROM users u
+JOIN roles r ON u.role_id = r.id
+WHERE u.id = $1
 	AND is_deleted = false
 	AND is_active = true
 `
 
-func (q *Queries) GetUserById(ctx context.Context, id pgtype.UUID) (User, error) {
+type GetUserByIdRow struct {
+	ID        pgtype.UUID
+	CreatedAt pgtype.Timestamp
+	UpdatedAt pgtype.Timestamp
+	Username  string
+	Email     string
+	Password  []byte
+	FirstName pgtype.Text
+	LastName  pgtype.Text
+	IsDeleted bool
+	IsActive  bool
+	RoleID    int32
+	Level     int32
+	Name      string
+}
+
+func (q *Queries) GetUserById(ctx context.Context, id pgtype.UUID) (GetUserByIdRow, error) {
 	row := q.db.QueryRow(ctx, getUserById, id)
-	var i User
+	var i GetUserByIdRow
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
@@ -152,12 +173,15 @@ func (q *Queries) GetUserById(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.LastName,
 		&i.IsDeleted,
 		&i.IsActive,
+		&i.RoleID,
+		&i.Level,
+		&i.Name,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active FROM users
+SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active, role_id FROM users
 WHERE username = $1
 	AND is_deleted = false
 	AND is_active = true
@@ -177,8 +201,19 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.LastName,
 		&i.IsDeleted,
 		&i.IsActive,
+		&i.RoleID,
 	)
 	return i, err
+}
+
+const hardDeleteUserByID = `-- name: HardDeleteUserByID :exec
+DELETE FROM users
+WHERE id = $1
+`
+
+func (q *Queries) HardDeleteUserByID(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, hardDeleteUserByID, id)
+	return err
 }
 
 const softDeleteUserByID = `-- name: SoftDeleteUserByID :one
@@ -205,7 +240,7 @@ SET
 	last_name = coalesce($6, last_name),
 	password = coalesce($7, password)
 WHERE id = $2 AND is_deleted = false
-RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active
+RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active, role_id
 `
 
 type UpdateUserParams struct {
@@ -240,6 +275,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.LastName,
 		&i.IsDeleted,
 		&i.IsActive,
+		&i.RoleID,
 	)
 	return i, err
 }

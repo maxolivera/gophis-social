@@ -11,6 +11,7 @@ import (
 	"github.com/maxolivera/gophis-social-network/docs"
 	"github.com/maxolivera/gophis-social-network/internal/auth"
 	"github.com/maxolivera/gophis-social-network/internal/database"
+	"github.com/maxolivera/gophis-social-network/internal/models"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.uber.org/zap"
 )
@@ -59,6 +60,8 @@ type DBConfig struct {
 //	@title			Gophis Social API
 //	@description	API for Gophis Social, the best and simplest Social Network
 
+// @BasePath /v1
+
 // @securityDefinitions.apikey	ApiKeyAuth
 // @in							header
 // @name						Authorization
@@ -105,7 +108,6 @@ func (app *Application) GetHandlers() http.Handler {
 		r.Post("/token", app.handlerCreateToken)
 
 		// Add routes
-		// TODO(maolivera): Add timeout within context
 		r.Route("/users", func(r chi.Router) {
 			r.Use(app.middlewareAuthToken)
 			r.Route("/{username}", func(r chi.Router) {
@@ -113,6 +115,7 @@ func (app *Application) GetHandlers() http.Handler {
 
 				r.Get("/", app.handlerGetUser)
 				r.Patch("/", app.handlerUpdateUser)
+				// TODO(maolivera): add role to modify user
 				// TODO(maolivera): add hard delete for admins
 				r.Delete("/", app.handlerSoftDeleteUser)
 
@@ -129,9 +132,9 @@ func (app *Application) GetHandlers() http.Handler {
 				r.Use(app.middlewarePostContext)
 
 				r.Get("/", app.handlerGetPost)
-				r.Patch("/", app.handlerUpdatePost)
-				// TODO(maolivera): add hard delete for admins
-				r.Delete("/", app.handlerSoftDeletePost)
+				r.Patch("/", app.middlewarePostPermissions(models.RoleModerator, true, app.handlerUpdatePost))
+				r.Delete("/", app.middlewarePostPermissions(models.RoleAdmin, true, app.handlerSoftDeletePost))
+				r.Delete("/hard", app.middlewarePostPermissions(models.RoleAdmin, false, app.handlerHardDeletePost))
 			})
 		})
 

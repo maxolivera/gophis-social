@@ -17,8 +17,9 @@ import (
 type contextKey string
 
 const (
-	contextKeyLoggedUser = contextKey("loggedUser")
-	contextKeyRouteUser  = contextKey("routeUser")
+	contextKeyLoggedUser     = contextKey("loggedUser")
+	contextKeyRouteUser      = contextKey("routeUser")
+	contextKeyLoggedUserRole = contextKey("loggedUserRole")
 )
 
 func (app *Application) middlewareAuthToken(next http.Handler) http.Handler {
@@ -27,12 +28,14 @@ func (app *Application) middlewareAuthToken(next http.Handler) http.Handler {
 		if authHeader == "" {
 			err := errors.New("authorization header is missing")
 			app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
+			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			err := errors.New("authorization header is malformed")
 			app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
+			return
 		}
 
 		tokenStr := parts[1]
@@ -40,6 +43,7 @@ func (app *Application) middlewareAuthToken(next http.Handler) http.Handler {
 		if err != nil {
 			err := fmt.Errorf("error during token validation: %v", err)
 			app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
+			return
 		}
 
 		pgID := pgtype.UUID{}
@@ -81,9 +85,11 @@ func (app *Application) middlewareAuthToken(next http.Handler) http.Handler {
 			return
 		}
 
-		user := models.DBUserToUser(dbUser)
+		user, role := models.DBUserWithRoleToUserAndRole(dbUser)
 
-		ctx := context.WithValue(r.Context(), contextKeyLoggedUser, user)
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, contextKeyLoggedUser, user)
+		ctx = context.WithValue(ctx, contextKeyLoggedUserRole, role)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -140,10 +146,106 @@ func (app *Application) middlewareRouteUserContext(next http.Handler) http.Handl
 	})
 }
 
+func (app *Application) middlewarePostContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		idStr := r.PathValue("postID")
+		if idStr == "" {
+			err := fmt.Errorf("post_id not provided")
+			// TODO(maolivera): maybe another message?
+			app.respondWithError(w, r, http.StatusBadRequest, err, err.Error())
+			return
+		}
+
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			err := fmt.Errorf("post_id not valid: %v", err)
+			app.respondWithError(w, r, http.StatusBadRequest, err, "post not found")
+			return
+		}
+
+		pgID := pgtype.UUID{
+			Bytes: id,
+			Valid: true,
+		}
+
+		dbPost, err := app.Database.GetPostById(
+			ctx,
+			pgID,
+		)
+
+		if err != nil {
+			switch err {
+			case pgx.ErrNoRows:
+				err := fmt.Errorf("post_id not found: %v", err)
+				app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
+			default:
+				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+			}
+			return
+		}
+		dbComments, err := app.Database.GetCommentsByPost(r.Context(), dbPost.ID)
+		if err != nil {
+			switch err {
+			case pgx.ErrNoRows:
+			// NOTE(maolivera): It's ok if a post do not have comments
+			default:
+				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+				return
+			}
+		}
+		post := models.DBPostToPost(dbPost)
+		comments := models.DBCommentsWithUser(dbComments)
+		post.Comments = comments
+
+		ctx = context.WithValue(ctx, "post", post)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// Is `userAllowed` is true, it will allow the user to perform the action "on itself", if not, it will only be allowed if role matches
+func (app *Application) middlewarePostPermissions(requiredRole models.RoleType, userAllowed bool, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := getLoggedUser(r)
+		role := getLoggedUserRole(r)
+		posts := getPostFromCtx(r)
+
+		// check if user is the same
+		if userAllowed && user.ID == posts.UserID {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// check if role level is enough
+		dbRole, err := app.Database.GetRoleByName(r.Context(), string(requiredRole))
+		if err != nil {
+			err = fmt.Errorf("error during role fetching: %v", err)
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+			return
+		}
+
+		if role.Level < int(dbRole.Level) {
+			// TODO(maolivera): Maybe add a field to the Application struct to keep the roles in memory?
+			err := fmt.Errorf("Role is not enough. Required '%s %d' vs '%s %d'", dbRole.Name, dbRole.Level, string(role.Name), role.Level)
+			app.respondWithError(w, r, http.StatusForbidden, err, "forbidden")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func getRouteUser(r *http.Request) models.User {
 	return r.Context().Value(contextKeyRouteUser).(models.User)
 }
 
 func getLoggedUser(r *http.Request) models.User {
 	return r.Context().Value(contextKeyLoggedUser).(models.User)
+}
+
+func getPostFromCtx(r *http.Request) models.Post {
+	return r.Context().Value("post").(models.Post)
+}
+
+func getLoggedUserRole(r *http.Request) models.ReducedRole {
+	return r.Context().Value(contextKeyLoggedUserRole).(models.ReducedRole)
 }

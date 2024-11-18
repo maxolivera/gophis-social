@@ -34,8 +34,11 @@ WHERE email = $1
 	AND is_active = true;
 
 -- name: GetUserById :one
-SELECT * FROM users
-WHERE id = $1
+SELECT
+	u.*, r.level, r.name
+FROM users u
+JOIN roles r ON u.role_id = r.id
+WHERE u.id = $1
 	AND is_deleted = false
 	AND is_active = true;
 
@@ -44,6 +47,10 @@ UPDATE users
 SET is_deleted = true
 WHERE id = $1
 RETURNING is_deleted;
+
+-- name: HardDeleteUserByID :exec
+DELETE FROM users
+WHERE id = $1;
 
 -- name: UpdateUser :one
 UPDATE users

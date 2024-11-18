@@ -299,14 +299,6 @@ func (app *Application) handlerActivateUser(w http.ResponseWriter, r *http.Reque
 //	@Failure		500			{object}	error	"Something went wrong on the server"
 //	@Router			/users/{username} [get]
 func (app *Application) handlerGetUser(w http.ResponseWriter, r *http.Request) {
-	type output struct {
-		ID        uuid.UUID `json:"id"`
-		Username  string    `json:"username"`
-		Email     string    `json:"email"`
-		FirstName string    `json:"first_name"`
-		LastName  string    `json:"last_name"`
-		CreatedAt time.Time `json:"created_at"`
-	}
 	user := getRouteUser(r)
 	app.respondWithJSON(w, r, http.StatusOK, user)
 }
@@ -365,56 +357,113 @@ func (app *Application) handlerSoftDeleteUser(w http.ResponseWriter, r *http.Req
 //	@Failure		400	{object}	error "Some parameter was either not provided or invalid."
 //	@Failure		404	{object}	error "User not found"
 //	@Failure		500	{object}	error "Something went wrong on the server"
-//	@Router			/users/{username} [delete]
-// TODO(maolivera): Implement Hard Delete user
+//	@Router			/users/{username}/hard [delete]
 */
+func (app *Application) handlerHardDeleteUser(w http.ResponseWriter, r *http.Request) {
+	user := getRouteUser(r)
+	pgID := pgtype.UUID{
+		Bytes: user.ID,
+		Valid: true,
+	}
+
+	err := app.Database.HardDeleteUserByID(r.Context(), pgID)
+	if err != nil {
+		switch err {
+		case pgx.ErrNoRows:
+			err := fmt.Errorf("User not deleted. Not found, user id: %v error: %v", user.ID, err)
+			app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
+		default:
+			err := fmt.Errorf("User could not deleted: %v", err)
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "user could not be deleted")
+		}
+		return
+	}
+
+	app.respondWithJSON(w, r, http.StatusNoContent, nil)
+}
+
+type UpdateUserPayload struct {
+	Email     string `json:"email,omitempty"`
+	Username  string `json:"username,omitempty"`
+	Password  string `json:"password,omitempty"`
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+}
 
 // Update User godoc
 //
 //	@Summary		Updates an User
-//	@Description	The user will be updated. In future will require auth.
+//	@Description	The user will be updated.
 //	@Tags			users
 //	@Accept			json
 //	@Produce		json
-//	@Param			username	path		string		true	"Username of user to be modified"
-//	@Param			Email		header		string		false	"New email"
-//	@Param			Username	header		string		false	"New username"
-//	@Param			Password	header		string		false	"New password"
-//	@Param			FirstName	header		string		false	"New first name"
-//	@Param			LastName	header		string		false	"New last name"
-//	@Success		200			{object}	models.User	"New User"
-//	@Failure		404			{object}	error		"User not found"
-//	@Failure		400			{object}	error		"Some parameter was either not provided or invalid."
-//	@Failure		409			{object}	error		"Either email or username already taken"
-//	@Failure		500			{object}	error		"Something went wrong on the server"
+//	@Param			username	path		string				true	"Username of user to be modified"
+//	@Param			Payload		body		UpdateUserPayload	false	"New parameters for user"
+//	@Success		200			{object}	models.User			"New User"
+//	@Failure		404			{object}	error				"User not found"
+//	@Failure		400			{object}	error				"Some parameter was either not provided or invalid."
+//	@Failure		409			{object}	error				"Either email or username already taken"
+//	@Failure		500			{object}	error				"Something went wrong on the server"
 //	@Router			/users/{username} [patch]
 func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
-	type input struct {
-		Email     string `json:"email,omitempty"`
-		Username  string `json:"username,omitempty"`
-		Password  string `json:"password,omitempty"`
-		FirstName string `json:"first_name,omitempty"`
-		LastName  string `json:"last_name,omitempty"`
-	}
 	user := getRouteUser(r)
 
-	in := input{}
+	in := UpdateUserPayload{}
 	if err := readJSON(w, r, &in); err != nil {
 		err = fmt.Errorf("error reading input parameters: %v", err)
 		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 	}
 
-	// TODO(maolivera): Validate fields
-
+	// TODO(maolivera): Split update password to its own endpoint
+	// TODO(maolivera): Better validation?
+	{ // Validate input
+		// Username
+		if len(in.Username) > 100 {
+			err := errors.New("username is too long")
+			app.respondWithError(w, r, http.StatusBadRequest, err, "username is too long")
+			return
+		}
+		if len(in.FirstName) > 100 {
+			err := errors.New("first name is too long")
+			app.respondWithError(w, r, http.StatusBadRequest, err, "first name is too long")
+			return
+		}
+		if len(in.LastName) > 100 {
+			err := errors.New("last name is too long")
+			app.respondWithError(w, r, http.StatusBadRequest, err, "last name is too long")
+			return
+		}
+		// Email
+		if len(in.Email) > 255 {
+			err := errors.New("email is too long")
+			app.respondWithError(w, r, http.StatusBadRequest, err, "email is too long")
+			return
+		}
+		if _, err := mail.ParseAddress(in.Email); err != nil {
+			err := fmt.Errorf("email is invalid: %v", err)
+			app.respondWithError(w, r, http.StatusBadRequest, err, "email is invalid")
+			return
+		}
+		// Password
+		if len(in.Password) > 72 {
+			err := errors.New("password is too long")
+			app.respondWithError(w, r, http.StatusBadRequest, err, "password is too long")
+			return
+		}
+		if len(in.Password) < 3 {
+			err := errors.New("password is too short")
+			app.respondWithError(w, r, http.StatusBadRequest, err, "password is too short")
+			return
+		}
+	}
 	currentTime := time.Now().UTC()
 	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
-	pgEmail := pgtype.Text{String: in.Email, Valid: len(in.Email) > 0}
-	pgUsername := pgtype.Text{String: in.Username, Valid: len(in.Username) > 0}
-	pgFirstName := pgtype.Text{String: in.FirstName, Valid: len(in.FirstName) > 0}
-	pgLastName := pgtype.Text{String: in.LastName, Valid: len(in.LastName) > 0}
+	pgEmail := pgtype.Text{String: in.Email, Valid: len(in.Email) > 0 || len(in.Email) <= 255}
+	pgUsername := pgtype.Text{String: in.Username, Valid: len(in.Username) > 0 || len(in.Username) <= 100}
+	pgFirstName := pgtype.Text{String: in.FirstName, Valid: len(in.FirstName) > 0 || len(in.FirstName) <= 100}
+	pgLastName := pgtype.Text{String: in.LastName, Valid: len(in.LastName) > 0 || len(in.LastName) <= 100}
 	var pgPassword []byte
 	if in.Password != "" {
-		// TODO(maolivera): validate password no more than 72 bytes long
 		hashed, err := bcrypt.GenerateFromPassword([]byte(in.Password), 14)
 		if err != nil {
 			err := fmt.Errorf("error when hashing password: %v", err)
