@@ -58,11 +58,11 @@ func (app *Application) middlewarePostContext(next http.Handler) http.Handler {
 		if err != nil {
 			switch err {
 			case pgx.ErrNoRows:
-			// TODO(maolivera): maybe add logging? but seems uncessary to add logs if no comments found
+			// NOTE(maolivera): It's ok if a post do not have comments
 			default:
 				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+				return
 			}
-			return
 		}
 		post := models.DBPostToPost(dbPost)
 		comments := models.DBCommentsWithUser(dbComments)
@@ -77,70 +77,60 @@ func getPostFromCtx(r *http.Request) *models.Post {
 	return r.Context().Value("post").(*models.Post)
 }
 
+type CreatePostPayload struct {
+	Title   string   `json:"title"`
+	Content string   `json:"content"`
+	Tags    []string `json:"tags"`
+}
+
 // Create Post godoc
 //
 //	@Summary		Creates a post
-//	@Description	Logged user (currently passed as user_id on headers, in future with auth) will publicate a post
+//	@Description	Logged user will publicate a post
 //	@Tags			posts
 //	@Accept			json
 //	@Produce		json
-//	@Param			userID	header		uuid	true	"User ID that will publicate the post"
-//	@Param			title	header		string	true	"Title of the post. Cannot be empty or longer than 200 characters"
-//	@Param			content	header		string	true	"Content of the post. Cannot be empty or longer than 1000 characters"
-//	@Param			tags	header		string	false	"Tags"
+//	@Param			Payload	body		CreatePostPayload	true	"Post content"
+//	@Param			content	header		string				true	"Content of the post. Cannot be empty or longer than 1000 characters"
+//	@Param			tags	header		string				false	"Tags"
 //	@Success		200		{object}	models.Post
 //	@Failure		500		{object}	error	"Something went wrong on the server"
 //	@Failure		400		{object}	error	"Some parameter was either not provided or is invalid (e.g. title too long)"
 //	@Security		ApiKeyAuth
 //	@Router			/posts [post]
 func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request) {
-	// types for JSON's input and output
-	type input struct {
-		Title   string    `json:"title"`
-		Content string    `json:"content"`
-		UserID  uuid.UUID `json:"user_id"`
-		Tags    []string  `json:"tags"`
-	}
-	type output struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		Title     string    `json:"title"`
-	}
-	in := input{}
-
+	in := CreatePostPayload{}
 	if err := readJSON(w, r, &in); err != nil {
 		err := fmt.Errorf("error during JSON decoding: %v", err)
 		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 
-	// check if some parameter was null
-	if in.Title == "" || in.Content == "" {
-		err := fmt.Errorf("title and content are required: %s\n", in)
-		app.respondWithError(w, r, http.StatusBadRequest, err, "something is missing")
-		return
-	}
-	if len(in.Title) > MAX_TITLE_LENGTH {
-		err := fmt.Errorf("title is too long, max is %d vs. current %d", MAX_TITLE_LENGTH, len(in.Title))
-		app.respondWithError(w, r, http.StatusBadRequest, err, "title is too long")
-		return
-	}
-	if len(in.Content) > MAX_CONTENT_LENGTH {
-		err := fmt.Errorf("content is too long, max is %d vs. current %d", MAX_CONTENT_LENGTH, len(in.Content))
-		app.respondWithError(w, r, http.StatusBadRequest, err, "content is too long")
-		return
+	{ // Validate input
+		if in.Title == "" || in.Content == "" {
+			err := fmt.Errorf("title and content are required: %s\n", in)
+			app.respondWithError(w, r, http.StatusBadRequest, err, "something is missing")
+			return
+		}
+		if len(in.Title) > MAX_TITLE_LENGTH {
+			err := fmt.Errorf("title is too long, max is %d vs. current %d", MAX_TITLE_LENGTH, len(in.Title))
+			app.respondWithError(w, r, http.StatusBadRequest, err, "title is too long")
+			return
+		}
+		if len(in.Content) > MAX_CONTENT_LENGTH {
+			err := fmt.Errorf("content is too long, max is %d vs. current %d", MAX_CONTENT_LENGTH, len(in.Content))
+			app.respondWithError(w, r, http.StatusBadRequest, err, "content is too long")
+			return
+		}
 	}
 
 	// create post
 	id := uuid.New()
-	pgID := pgtype.UUID{
-		Bytes: id,
-		Valid: true,
-	}
-	pgUserID := pgtype.UUID{
-		Bytes: in.UserID,
-		Valid: true,
-	}
+	pgID := pgtype.UUID{Bytes: id, Valid: true}
+
+	user := getLoggedUser(r)
+	pgUserID := pgtype.UUID{Bytes: user.ID, Valid: true}
+
 	currentTime := time.Now().UTC()
 	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
 

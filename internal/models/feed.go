@@ -8,8 +8,6 @@ import (
 	"github.com/maxolivera/gophis-social-network/internal/database"
 )
 
-// TODO(maolivera): Better struct to not send empty fields on User
-
 type Feed struct {
 	ID           uuid.UUID   `json:"id"`
 	Title        string      `json:"title"`

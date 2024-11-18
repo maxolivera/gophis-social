@@ -106,8 +106,61 @@ func (q *Queries) GetInvitation(ctx context.Context, arg GetInvitationParams) (p
 	return user_id, err
 }
 
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active FROM users
+WHERE email = $1
+	AND is_deleted = false
+	AND is_active = true
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Username,
+		&i.Email,
+		&i.Password,
+		&i.FirstName,
+		&i.LastName,
+		&i.IsDeleted,
+		&i.IsActive,
+	)
+	return i, err
+}
+
+const getUserById = `-- name: GetUserById :one
+SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active FROM users
+WHERE id = $1
+	AND is_deleted = false
+	AND is_active = true
+`
+
+func (q *Queries) GetUserById(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserById, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Username,
+		&i.Email,
+		&i.Password,
+		&i.FirstName,
+		&i.LastName,
+		&i.IsDeleted,
+		&i.IsActive,
+	)
+	return i, err
+}
+
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active FROM users WHERE username = $1 AND is_deleted = false
+SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active FROM users
+WHERE username = $1
+	AND is_deleted = false
+	AND is_active = true
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {

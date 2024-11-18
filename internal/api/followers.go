@@ -19,7 +19,6 @@ import (
 //	@Accept			json
 //	@Produce		json
 //	@Param			username	path	string	true	"Username of user to follow"
-//	@Param			username	header	string	true	"Follower username"
 //	@Success		204			"Follower will follow username"
 //	@Failure		500			{object}	error
 //	@Failure		404			{object}	error	"User at /{username} was not found"
@@ -27,32 +26,14 @@ import (
 //	@Security		ApiKeyAuth
 //	@Router			/v1/{username}/follow [put]
 func (app *Application) handlerFollowUser(w http.ResponseWriter, r *http.Request) {
-	// TODO(maolivera): Change to auth
-	type Follower struct {
-		Username string `json:"username"`
-	}
-	in := &Follower{}
 	ctx := r.Context()
-
-	if err := readJSON(w, r, in); err != nil {
-		err = fmt.Errorf("error during follower username unmarshal: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-	follower, err := app.Database.GetUserByUsername(ctx, in.Username)
-	if err != nil {
-		err = fmt.Errorf("error during follower retrieve: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-	// ==
-
-	user := getUserFromCtx(r)
+	routeUser := getRouteUser(r)
+	loggedUser := getLoggedUser(r)
 
 	currentTime := time.Now().UTC()
 	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
-	pgUserID := pgtype.UUID{Bytes: user.ID, Valid: true}
-	pgFollowerID := follower.ID
+	pgUserID := pgtype.UUID{Bytes: routeUser.ID, Valid: true}
+	pgFollowerID := pgtype.UUID{Bytes: loggedUser.ID, Valid: true}
 
 	params := database.FollowByIDParams{
 		CreatedAt:  pgTime,
@@ -85,30 +66,12 @@ func (app *Application) handlerFollowUser(w http.ResponseWriter, r *http.Request
 //	@Security		ApiKeyAuth
 //	@Router			/v1/{username}/unfollow [put]
 func (app *Application) handlerUnfollowUser(w http.ResponseWriter, r *http.Request) {
-	// TODO(maolivera): Change to auth
-	type Follower struct {
-		Username string `json:"username"`
-	}
-	in := &Follower{}
 	ctx := r.Context()
+	routeUser := getRouteUser(r)
+	loggedUser := getLoggedUser(r)
 
-	if err := readJSON(w, r, in); err != nil {
-		err = fmt.Errorf("error during follower username unmarshal: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-	follower, err := app.Database.GetUserByUsername(ctx, in.Username)
-	if err != nil {
-		err = fmt.Errorf("error during follower retrieve: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-	// ==
-
-	user := getUserFromCtx(r)
-
-	pgUserID := pgtype.UUID{Bytes: user.ID, Valid: true}
-	pgFollowerID := follower.ID
+	pgUserID := pgtype.UUID{Bytes: routeUser.ID, Valid: true}
+	pgFollowerID := pgtype.UUID{Bytes: loggedUser.ID, Valid: true}
 
 	params := database.UnfollowByIDParams{
 		UserID:     pgUserID,

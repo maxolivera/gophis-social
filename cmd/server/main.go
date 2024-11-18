@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/maxolivera/gophis-social-network/internal/api"
+	"github.com/maxolivera/gophis-social-network/internal/auth"
 	"github.com/maxolivera/gophis-social-network/internal/database"
 	"github.com/maxolivera/gophis-social-network/internal/env"
 	"go.uber.org/zap"
@@ -31,6 +32,7 @@ func main() {
 	maxIdleTime, err := env.GetInt("DB_MAX_IDLE_TIME", logger) // MaxIdleTime represents minutes
 	pass, err := env.GetString("AUTH_BASIC_USER", logger)
 	user, err := env.GetString("AUTH_BASIC_PASS", logger)
+	secret, err := env.GetString("JWT_SECRET", logger)
 
 	if err != nil {
 		logger.Fatalf("error loading env values: %v\n", err)
@@ -54,8 +56,20 @@ func main() {
 				Username: user,
 				Password: pass,
 			},
+			Token: &api.TokenConfig{
+				Secret:         secret,
+				ExpirationTime: 3 * 24 * time.Hour,
+				Issuer:         "gophissocial",
+			},
 		},
 	}
+
+	// == AUTH ==
+	authenticator := auth.NewJWTAuthenticator(
+		cfg.Authentication.Token.Secret,
+		cfg.Authentication.Token.Issuer,
+		cfg.Authentication.Token.Issuer,
+	)
 
 	// == DATABASE ==
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -81,10 +95,11 @@ func main() {
 
 	// == APPLICATION ==
 	app := &api.Application{
-		Config:   cfg,
-		Database: queries,
-		Pool:     pool,
-		Logger:   logger,
+		Config:        cfg,
+		Database:      queries,
+		Pool:          pool,
+		Logger:        logger,
+		Authenticator: authenticator,
 	}
 
 	logger.Fatalln(app.Start())

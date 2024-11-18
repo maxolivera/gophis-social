@@ -9,16 +9,18 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/maxolivera/gophis-social-network/docs"
+	"github.com/maxolivera/gophis-social-network/internal/auth"
 	"github.com/maxolivera/gophis-social-network/internal/database"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.uber.org/zap"
 )
 
 type Application struct {
-	Config   *Config
-	Pool     *pgxpool.Pool
-	Database *database.Queries
-	Logger   *zap.SugaredLogger
+	Config        *Config
+	Pool          *pgxpool.Pool
+	Database      *database.Queries
+	Logger        *zap.SugaredLogger
+	Authenticator auth.Authenticator
 }
 
 type Config struct {
@@ -33,6 +35,13 @@ type Config struct {
 
 type AuthConfig struct {
 	BasicAuth *BasicAuth
+	Token     *TokenConfig
+}
+
+type TokenConfig struct {
+	Secret         string
+	ExpirationTime time.Duration
+	Issuer         string
 }
 
 type BasicAuth struct {
@@ -93,12 +102,14 @@ func (app *Application) GetHandlers() http.Handler {
 		// Non-auth routes
 		r.Post("/register", app.handlerCreateUser)
 		r.Post("/activate/{token}", app.handlerActivateUser)
+		r.Post("/token", app.handlerCreateToken)
 
 		// Add routes
 		// TODO(maolivera): Add timeout within context
 		r.Route("/users", func(r chi.Router) {
+			r.Use(app.middlewareAuthToken)
 			r.Route("/{username}", func(r chi.Router) {
-				r.Use(app.middlewareUserContext)
+				r.Use(app.middlewareRouteUserContext)
 
 				r.Get("/", app.handlerGetUser)
 				r.Patch("/", app.handlerUpdateUser)
@@ -111,6 +122,8 @@ func (app *Application) GetHandlers() http.Handler {
 		})
 
 		r.Route("/posts", func(r chi.Router) {
+			r.Use(app.middlewareAuthToken)
+
 			r.Post("/", app.handlerCreatePost)
 			r.Route("/{postID}", func(r chi.Router) {
 				r.Use(app.middlewarePostContext)
@@ -122,9 +135,8 @@ func (app *Application) GetHandlers() http.Handler {
 			})
 		})
 
-		// TODO(maolivera): Change to auth
-		r.Get("/", app.handlerFeed)
-		r.Get("/search", app.handlerSearch)
+		r.With(app.middlewareAuthToken).Get("/feed", app.handlerFeed)
+		r.With(app.middlewareAuthToken).Get("/search", app.handlerSearch)
 	})
 
 	return r

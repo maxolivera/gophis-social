@@ -20,43 +20,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (app *Application) middlewareUserContext(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		username := r.PathValue("username")
-		if username == "" {
-			err := fmt.Errorf("username not provided")
-			// TODO(maolivera): maybe another message?
-			app.respondWithError(w, r, http.StatusBadRequest, err, err.Error())
-			return
-		}
-
-		dbUser, err := app.Database.GetUserByUsername(
-			ctx,
-			username,
-		)
-
-		if err != nil {
-			switch err {
-			case pgx.ErrNoRows:
-				err := fmt.Errorf("username not found: %v", err)
-				app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
-			default:
-				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-			}
-			return
-		}
-		user := models.DBUserToUser(dbUser)
-
-		ctx = context.WithValue(ctx, "user", user)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func getUserFromCtx(r *http.Request) models.User {
-	return r.Context().Value("user").(models.User)
-}
-
 type CreateUserPayload struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
@@ -344,7 +307,7 @@ func (app *Application) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 		LastName  string    `json:"last_name"`
 		CreatedAt time.Time `json:"created_at"`
 	}
-	user := getUserFromCtx(r)
+	user := getRouteUser(r)
 	app.respondWithJSON(w, r, http.StatusOK, user)
 }
 
@@ -360,8 +323,9 @@ func (app *Application) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 //	@Failure		404			{object}	error	"User not found"
 //	@Failure		500			{object}	error	"Something went wrong on the server"
 //	@Router			/users/{username} [delete]
+//	@Security		ApiKeyAuth
 func (app *Application) handlerSoftDeleteUser(w http.ResponseWriter, r *http.Request) {
-	user := getUserFromCtx(r)
+	user := getRouteUser(r)
 
 	pgID := pgtype.UUID{
 		Bytes: user.ID,
@@ -432,7 +396,7 @@ func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request
 		FirstName string `json:"first_name,omitempty"`
 		LastName  string `json:"last_name,omitempty"`
 	}
-	user := getUserFromCtx(r)
+	user := getRouteUser(r)
 
 	in := input{}
 	if err := readJSON(w, r, &in); err != nil {

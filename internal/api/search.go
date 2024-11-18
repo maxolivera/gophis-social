@@ -18,7 +18,7 @@ import (
 //
 //	@Summary		Search posts
 //	@Description	Search posts according to parameters. Is likely that in future some kind of auth will be required
-//	@tags			search, feed
+//	@tags			posts
 //	@Accept			json
 //	@Produce		json
 //	@Param			search	path		string	false	"Search both in Post's Title and Content"
@@ -27,7 +27,8 @@ import (
 //	@Param			offset	path		int32	false	"Offset. Default at 0"
 //	@Param			sort	path		bool	false	"Sort, true if descending order"
 //	@Success		200		{object}	[]models.Feed
-//	@Success		404		{object}	error "No posts with selected parameters"
+//	@Failure		401		{object}	error "Unauthorized"
+//	@Failure		404		{object}	error "No posts with selected parameters"
 //	@Failure		500		{object}	error
 //	@Router			/v1/search [get]
 func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
