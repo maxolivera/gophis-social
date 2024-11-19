@@ -21,24 +21,18 @@ WHERE id = $1;
 DELETE FROM user_invitations
 WHERE token = $1;
 
--- name: GetUserByUsername :one
-SELECT * FROM users
-WHERE username = $1
-	AND is_deleted = false
-	AND is_active = true;
-
 -- name: GetUserByEmail :one
 SELECT * FROM users
 WHERE email = $1
 	AND is_deleted = false
 	AND is_active = true;
 
--- name: GetUserById :one
+-- name: GetUserByUsername :one
 SELECT
 	u.*, r.level, r.name
 FROM users u
 JOIN roles r ON u.role_id = r.id
-WHERE u.id = $1
+WHERE u.username = $1
 	AND is_deleted = false
 	AND is_active = true;
 

@@ -8,13 +8,14 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
-	Username  string    `json:"username"`
-	FirstName string    `json:"first_name"`
-	LastName  string    `json:"last_name"`
+	ID        uuid.UUID   `json:"id"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
+	Email     string      `json:"email"`
+	Username  string      `json:"username"`
+	FirstName string      `json:"first_name"`
+	LastName  string      `json:"last_name"`
+	Role      ReducedRole `json:"role"`
 }
 
 // Special type for Feed, do not contain CreatedAt, UpdatedAt, Email, FirstName, LastName
@@ -43,17 +44,18 @@ func DBUsersToUser(dbUsers []database.User) []User {
 	return users
 }
 
-func DBUserWithRoleToUserAndRole(dbUser database.GetUserByIdRow) (User, ReducedRole) {
-	return User{
-			ID:        dbUser.ID.Bytes,
-			CreatedAt: dbUser.CreatedAt.Time,
-			UpdatedAt: dbUser.UpdatedAt.Time,
-			Email:     dbUser.Email,
-			Username:  dbUser.Username,
-			FirstName: dbUser.FirstName.String,
-			LastName:  dbUser.LastName.String,
-		}, ReducedRole{
+func DBUserWithRoleToUser(dbUser database.GetUserByUsernameRow) *User {
+	return &User{
+		ID:        dbUser.ID.Bytes,
+		CreatedAt: dbUser.CreatedAt.Time,
+		UpdatedAt: dbUser.UpdatedAt.Time,
+		Email:     dbUser.Email,
+		Username:  dbUser.Username,
+		FirstName: dbUser.FirstName.String,
+		LastName:  dbUser.LastName.String,
+		Role: ReducedRole{
 			Level: int(dbUser.Level),
 			Name:  RoleType(dbUser.Name),
-		}
+		},
+	}
 }

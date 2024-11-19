@@ -133,17 +133,17 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	return i, err
 }
 
-const getUserById = `-- name: GetUserById :one
+const getUserByUsername = `-- name: GetUserByUsername :one
 SELECT
 	u.id, u.created_at, u.updated_at, u.username, u.email, u.password, u.first_name, u.last_name, u.is_deleted, u.is_active, u.role_id, r.level, r.name
 FROM users u
 JOIN roles r ON u.role_id = r.id
-WHERE u.id = $1
+WHERE u.username = $1
 	AND is_deleted = false
 	AND is_active = true
 `
 
-type GetUserByIdRow struct {
+type GetUserByUsernameRow struct {
 	ID        pgtype.UUID
 	CreatedAt pgtype.Timestamp
 	UpdatedAt pgtype.Timestamp
@@ -159,9 +159,9 @@ type GetUserByIdRow struct {
 	Name      string
 }
 
-func (q *Queries) GetUserById(ctx context.Context, id pgtype.UUID) (GetUserByIdRow, error) {
-	row := q.db.QueryRow(ctx, getUserById, id)
-	var i GetUserByIdRow
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error) {
+	row := q.db.QueryRow(ctx, getUserByUsername, username)
+	var i GetUserByUsernameRow
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
@@ -176,32 +176,6 @@ func (q *Queries) GetUserById(ctx context.Context, id pgtype.UUID) (GetUserByIdR
 		&i.RoleID,
 		&i.Level,
 		&i.Name,
-	)
-	return i, err
-}
-
-const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active, role_id FROM users
-WHERE username = $1
-	AND is_deleted = false
-	AND is_active = true
-`
-
-func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByUsername, username)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Username,
-		&i.Email,
-		&i.Password,
-		&i.FirstName,
-		&i.LastName,
-		&i.IsDeleted,
-		&i.IsActive,
-		&i.RoleID,
 	)
 	return i, err
 }

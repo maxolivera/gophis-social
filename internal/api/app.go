@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/maxolivera/gophis-social-network/docs"
 	"github.com/maxolivera/gophis-social-network/internal/auth"
+	"github.com/maxolivera/gophis-social-network/internal/cache"
 	"github.com/maxolivera/gophis-social-network/internal/database"
 	"github.com/maxolivera/gophis-social-network/internal/models"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
@@ -20,6 +21,7 @@ type Application struct {
 	Config        *Config
 	Pool          *pgxpool.Pool
 	Database      *database.Queries
+	Cache         *cache.Storage
 	Logger        *zap.SugaredLogger
 	Authenticator auth.Authenticator
 }
@@ -32,6 +34,14 @@ type Config struct {
 	ApiUrl         string
 	ExpirationTime time.Duration
 	Authentication *AuthConfig
+	Redis          *RedisConfig
+}
+
+type RedisConfig struct {
+	Enabled  bool
+	Address  string
+	Password string
+	Database int
 }
 
 type AuthConfig struct {

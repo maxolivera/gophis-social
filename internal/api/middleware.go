@@ -46,34 +46,21 @@ func (app *Application) middlewareAuthToken(next http.Handler) http.Handler {
 			return
 		}
 
-		pgID := pgtype.UUID{}
-
-		{ // parse user id
-			claims := token.Claims.(jwt.MapClaims)
-			userIDRaw, ok := claims["sub"]
-			if !ok {
-				err := errors.New("user ID (sub) not found in token claims")
-				app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
-			}
-
-			userIDStr, ok := userIDRaw.(string)
-			if !ok {
-				err := errors.New("user ID (sub) in token claims is not a valid string")
-				app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
-			}
-
-			userID, err := uuid.Parse(userIDStr)
-			if err != nil {
-				err := fmt.Errorf("user ID (sub) is not a valid UUID: %v", err)
-				app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
-				return
-			}
-
-			pgID.Bytes = userID
-			pgID.Valid = true
+		// parse user id
+		claims := token.Claims.(jwt.MapClaims)
+		usernameRaw, ok := claims["sub"]
+		if !ok {
+			err := errors.New("user ID (sub) not found in token claims")
+			app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
 		}
 
-		dbUser, err := app.Database.GetUserById(r.Context(), pgID)
+		username, ok := usernameRaw.(string)
+		if !ok {
+			err := errors.New("user ID (sub) in token claims is not a valid string")
+			app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
+		}
+
+		user, err := app.getUser(r, username)
 		if err != nil {
 			switch err {
 			case pgx.ErrNoRows:
@@ -85,11 +72,8 @@ func (app *Application) middlewareAuthToken(next http.Handler) http.Handler {
 			return
 		}
 
-		user, role := models.DBUserWithRoleToUserAndRole(dbUser)
-
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, contextKeyLoggedUser, user)
-		ctx = context.WithValue(ctx, contextKeyLoggedUserRole, role)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -119,27 +103,22 @@ func (app *Application) middlewareRouteUserContext(next http.Handler) http.Handl
 		username := r.PathValue("username")
 		if username == "" {
 			err := fmt.Errorf("username not provided")
-			// TODO(maolivera): maybe another message?
 			app.respondWithError(w, r, http.StatusBadRequest, err, err.Error())
 			return
 		}
 
-		dbUser, err := app.Database.GetUserByUsername(
-			ctx,
-			username,
-		)
-
+		user, err := app.getUser(r, username)
 		if err != nil {
 			switch err {
 			case pgx.ErrNoRows:
-				err := fmt.Errorf("username not found: %v", err)
+				err = fmt.Errorf("user not found: %v", err)
 				app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
 			default:
+				err = fmt.Errorf("error fetching user: %v", err)
 				app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			}
 			return
 		}
-		user := models.DBUserToUser(dbUser)
 
 		ctx = context.WithValue(ctx, contextKeyRouteUser, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -207,7 +186,6 @@ func (app *Application) middlewarePostContext(next http.Handler) http.Handler {
 func (app *Application) middlewarePostPermissions(requiredRole models.RoleType, userAllowed bool, next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := getLoggedUser(r)
-		role := getLoggedUserRole(r)
 		posts := getPostFromCtx(r)
 
 		// check if user is the same
@@ -223,9 +201,9 @@ func (app *Application) middlewarePostPermissions(requiredRole models.RoleType, 
 			return
 		}
 
-		if role.Level < int(dbRole.Level) {
+		if user.Role.Level < int(dbRole.Level) {
 			// TODO(maolivera): Maybe add a field to the Application struct to keep the roles in memory?
-			err := fmt.Errorf("Role is not enough. Required '%s %d' vs '%s %d'", dbRole.Name, dbRole.Level, string(role.Name), role.Level)
+			err := fmt.Errorf("Role is not enough. Required '%s %d' vs '%s %d'", dbRole.Name, dbRole.Level, string(user.Role.Name), user.Role.Level)
 			app.respondWithError(w, r, http.StatusForbidden, err, "forbidden")
 			return
 		}
@@ -234,18 +212,53 @@ func (app *Application) middlewarePostPermissions(requiredRole models.RoleType, 
 	})
 }
 
-func getRouteUser(r *http.Request) models.User {
-	return r.Context().Value(contextKeyRouteUser).(models.User)
+func getRouteUser(r *http.Request) *models.User {
+	return r.Context().Value(contextKeyRouteUser).(*models.User)
 }
 
-func getLoggedUser(r *http.Request) models.User {
-	return r.Context().Value(contextKeyLoggedUser).(models.User)
+func getLoggedUser(r *http.Request) *models.User {
+	return r.Context().Value(contextKeyLoggedUser).(*models.User)
 }
 
-func getPostFromCtx(r *http.Request) models.Post {
-	return r.Context().Value("post").(models.Post)
+func getPostFromCtx(r *http.Request) *models.Post {
+	return r.Context().Value("post").(*models.Post)
 }
 
-func getLoggedUserRole(r *http.Request) models.ReducedRole {
-	return r.Context().Value(contextKeyLoggedUserRole).(models.ReducedRole)
+func (app *Application) getUser(r *http.Request, username string) (*models.User, error) {
+	ctx := r.Context()
+	// No cache
+	if !app.Config.Redis.Enabled {
+		dbUser, err := app.Database.GetUserByUsername(r.Context(), username)
+		if err != nil {
+			return nil, err
+		}
+
+		user := models.DBUserWithRoleToUser(dbUser)
+		return user, nil
+	}
+
+	// Cache enabled
+	// 1. Check cache
+	user, err := app.Cache.Users.Get(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+
+	if user == nil {
+		// 2. Use DB instead
+		dbUser, err := app.Database.GetUserByUsername(r.Context(), username)
+		if err != nil {
+			return nil, err
+		}
+
+		user = models.DBUserWithRoleToUser(dbUser)
+
+		// 3. Update cache
+		if err := app.Cache.Users.Set(ctx, user); err != nil {
+			return nil, err
+		}
+	}
+
+	// 4. Return user
+	return user, nil
 }

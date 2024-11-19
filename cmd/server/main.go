@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/maxolivera/gophis-social-network/internal/api"
 	"github.com/maxolivera/gophis-social-network/internal/auth"
+	"github.com/maxolivera/gophis-social-network/internal/cache"
 	"github.com/maxolivera/gophis-social-network/internal/database"
 	"github.com/maxolivera/gophis-social-network/internal/env"
 	"go.uber.org/zap"
@@ -32,6 +33,9 @@ func main() {
 	maxIdleTime, err := env.GetInt("DB_MAX_IDLE_TIME", logger) // MaxIdleTime represents minutes
 	pass, err := env.GetString("AUTH_BASIC_USER", logger)
 	user, err := env.GetString("AUTH_BASIC_PASS", logger)
+	redisAddr, err := env.GetString("REDIS_ADDRESS", logger)
+	redisPass, err := env.GetString("REDIS_PASSWORD", logger)
+	redisDb, err := env.GetInt("REDIS_DB", logger)
 	secret, err := env.GetString("JWT_SECRET", logger)
 
 	if err != nil {
@@ -62,6 +66,12 @@ func main() {
 				Issuer:         "gophissocial",
 			},
 		},
+		Redis: &api.RedisConfig{
+			Address:  redisAddr,
+			Password: redisPass,
+			Database: redisDb,
+			Enabled:  (redisAddr != ""),
+		},
 	}
 
 	// == AUTH ==
@@ -70,6 +80,13 @@ func main() {
 		cfg.Authentication.Token.Issuer,
 		cfg.Authentication.Token.Issuer,
 	)
+
+	// == CACHE ==
+	var cacheStorage *cache.Storage
+	if cfg.Redis.Enabled {
+		redisClient := cache.NewRedisClient(cfg.Redis.Address, cfg.Redis.Password, cfg.Redis.Database)
+		cacheStorage = cache.NewRedisStorage(redisClient)
+	}
 
 	// == DATABASE ==
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -97,6 +114,7 @@ func main() {
 	app := &api.Application{
 		Config:        cfg,
 		Database:      queries,
+		Cache:         cacheStorage,
 		Pool:          pool,
 		Logger:        logger,
 		Authenticator: authenticator,

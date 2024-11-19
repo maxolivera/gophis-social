@@ -100,7 +100,7 @@ func (app *Application) handlerCreateToken(w http.ResponseWriter, r *http.Reques
 	user := models.DBUserToUser(dbUser)
 
 	claims := jwt.MapClaims{
-		"sub": user.ID,
+		"sub": user.Username,
 		"exp": time.Now().Add(app.Config.Authentication.Token.ExpirationTime).Unix(),
 		"iat": time.Now().Unix(),
 		"nbf": time.Now().Unix(),

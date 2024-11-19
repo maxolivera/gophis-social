@@ -298,6 +298,7 @@ func (app *Application) handlerActivateUser(w http.ResponseWriter, r *http.Reque
 //	@Failure		400			{object}	error	"Some parameter was either not provided or invalid."
 //	@Failure		500			{object}	error	"Something went wrong on the server"
 //	@Router			/users/{username} [get]
+//	@Security		ApiKeyAuth
 func (app *Application) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 	user := getRouteUser(r)
 	app.respondWithJSON(w, r, http.StatusOK, user)
@@ -509,12 +510,16 @@ func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request
 		case pgx.ErrNoRows:
 			app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
 		default:
-			err := fmt.Errorf("post could not updated: %v", err)
+			err := fmt.Errorf("user could not updated: %v", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		}
 		return
 	}
 	newUser := models.DBUserToUser(newDBUser)
+
+	if app.Config.Redis.Enabled {
+		app.Cache.Users.Delete(r.Context(), user.Username)
+	}
 
 	app.respondWithJSON(w, r, http.StatusOK, newUser)
 }
