@@ -10,11 +10,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type UserStore struct {
+type UserRedisStore struct {
 	r *redis.Client
 }
 
-func (s UserStore) Get(ctx context.Context, username string) (*models.User, error) {
+func (s UserRedisStore) Get(ctx context.Context, username string) (*models.User, error) {
 	key := fmt.Sprintf("user-%s", username)
 
 	data, err := s.r.Get(ctx, key).Result()
@@ -36,7 +36,7 @@ func (s UserStore) Get(ctx context.Context, username string) (*models.User, erro
 	return &user, nil
 }
 
-func (s UserStore) Set(ctx context.Context, user *models.User) error {
+func (s UserRedisStore) Set(ctx context.Context, user *models.User) error {
 	if user.Username == "" {
 		return errors.New("username is empty")
 	}
@@ -50,7 +50,37 @@ func (s UserStore) Set(ctx context.Context, user *models.User) error {
 	return s.r.SetEx(ctx, key, json, UserTimeExpiration).Err()
 }
 
-func (s UserStore) Delete(ctx context.Context, username string) {
+func (s UserRedisStore) Delete(ctx context.Context, username string) {
 	key := fmt.Sprintf("user-%s", username)
 	s.r.Del(ctx, key)
+}
+
+type UserLRUCache struct {
+	c *LRUCache
+}
+
+func (u UserLRUCache) Get(ctx context.Context, username string) (*models.User, error) {
+	key := "user-" + username
+	value, found := u.c.Get(key)
+	if !found {
+		return nil, nil
+	}
+
+	user, ok := value.(*models.User)
+	if !ok {
+		return nil, errors.New("value is not an user")
+	}
+
+	return user, nil
+}
+
+func (u UserLRUCache) Set(ctx context.Context, user *models.User) error {
+	key := "user-" + user.Username
+	u.c.Set(key, user)
+	return nil
+}
+
+func (u UserLRUCache) Delete(ctx context.Context, username string) {
+	key := "user-" + username
+	u.c.Delete(key)
 }

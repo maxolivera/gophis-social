@@ -33,6 +33,9 @@ func main() {
 	maxIdleTime, err := env.GetInt("DB_MAX_IDLE_TIME", logger) // MaxIdleTime represents minutes
 	pass, err := env.GetString("AUTH_BASIC_USER", logger)
 	user, err := env.GetString("AUTH_BASIC_PASS", logger)
+	cacheStruct, err := env.GetString("CACHE_STRUCT", logger)
+	lruCap, err := env.GetInt("LRU_CAPACITY", logger)
+	lruTTL, err := env.GetInt("LRU_TTL", logger) // Minutes
 	redisAddr, err := env.GetString("REDIS_ADDRESS", logger)
 	redisPass, err := env.GetString("REDIS_PASSWORD", logger)
 	redisDb, err := env.GetInt("REDIS_DB", logger)
@@ -66,12 +69,6 @@ func main() {
 				Issuer:         "gophissocial",
 			},
 		},
-		Redis: &api.RedisConfig{
-			Address:  redisAddr,
-			Password: redisPass,
-			Database: redisDb,
-			Enabled:  (redisAddr != ""),
-		},
 	}
 
 	// == AUTH ==
@@ -83,10 +80,30 @@ func main() {
 
 	// == CACHE ==
 	var cacheStorage *cache.Storage
-	if cfg.Redis.Enabled {
-		redisClient := cache.NewRedisClient(cfg.Redis.Address, cfg.Redis.Password, cfg.Redis.Database)
-		cacheStorage = cache.NewRedisStorage(redisClient)
+	cacheConfig := &api.CacheConfig{}
+	if cacheStruct != "" {
+		if cacheStruct == "REDIS" {
+			cacheConfig.Enabled = true
+			cacheConfig.Redis = &api.RedisConfig{
+				Address:  redisAddr,
+				Password: redisPass,
+				Database: redisDb,
+			}
+			redisClient := cache.NewRedisClient(cacheConfig.Redis.Address, cacheConfig.Redis.Password, cacheConfig.Redis.Database)
+			cacheStorage = cache.NewRedisStorage(redisClient)
+		} else if cacheStruct == "LRU" {
+			cacheConfig.Enabled = true
+			cacheConfig.LRU = &api.LruConfig{
+				Capacity: lruCap,
+				TTL:      time.Duration(lruTTL) * time.Minute,
+			}
+			lru := cache.NewLRUCache(cacheConfig.LRU.Capacity, cacheConfig.LRU.TTL)
+			cacheStorage = cache.NewLRUStorage(lru)
+		}
+	} else {
+		cacheConfig.Enabled = false
 	}
+	cfg.Cache = cacheConfig
 
 	// == DATABASE ==
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

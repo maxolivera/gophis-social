@@ -39,7 +39,18 @@ type Config struct {
 	ApiUrl         string
 	ExpirationTime time.Duration
 	Authentication *AuthConfig
-	Redis          *RedisConfig
+	Cache          *CacheConfig
+}
+
+type CacheConfig struct {
+	Enabled bool
+	Redis   *RedisConfig
+	LRU     *LruConfig
+}
+
+type LruConfig struct {
+	Capacity int
+	TTL      time.Duration
 }
 
 type RedisConfig struct {

@@ -517,7 +517,7 @@ func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request
 	}
 	newUser := models.DBUserToUser(newDBUser)
 
-	if app.Config.Redis.Enabled {
+	if app.Config.Cache.Enabled {
 		app.Cache.Users.Delete(r.Context(), user.Username)
 	}
 

@@ -1,10 +1,12 @@
 package cache
 
-import "github.com/redis/go-redis/v9"
+import (
+	"github.com/redis/go-redis/v9"
+)
 
 func NewRedisStorage(r *redis.Client) *Storage {
 	return &Storage{
-		Users: &UserStore{r},
+		Users: &UserRedisStore{r},
 	}
 }
 

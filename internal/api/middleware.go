@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -227,7 +228,7 @@ func getPostFromCtx(r *http.Request) *models.Post {
 func (app *Application) getUser(r *http.Request, username string) (*models.User, error) {
 	ctx := r.Context()
 	// No cache
-	if !app.Config.Redis.Enabled {
+	if !app.Config.Cache.Enabled {
 		dbUser, err := app.Database.GetUserByUsername(r.Context(), username)
 		if err != nil {
 			return nil, err
@@ -239,6 +240,8 @@ func (app *Application) getUser(r *http.Request, username string) (*models.User,
 
 	// Cache enabled
 	// 1. Check cache
+	var hit bool
+	start := time.Now()
 	user, err := app.Cache.Users.Get(ctx, username)
 	if err != nil {
 		return nil, err
@@ -257,7 +260,14 @@ func (app *Application) getUser(r *http.Request, username string) (*models.User,
 		if err := app.Cache.Users.Set(ctx, user); err != nil {
 			return nil, err
 		}
+		hit = false
+	} else {
+		hit = true
 	}
+
+	elapsed := time.Since(start)
+
+	app.Logger.Infow("fetching user", "cache hit", hit, "total time", elapsed)
 
 	// 4. Return user
 	return user, nil
