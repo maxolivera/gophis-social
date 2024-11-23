@@ -12,6 +12,7 @@ type Storage struct {
 		Get(context.Context, string) (*models.User, error)
 		Set(context.Context, *models.User) error
 		Delete(context.Context, string)
+		Len(context.Context) int
 	}
 }
 

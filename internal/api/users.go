@@ -406,6 +406,7 @@ type UpdateUserPayload struct {
 //	@Failure		409			{object}	error				"Either email or username already taken"
 //	@Failure		500			{object}	error				"Something went wrong on the server"
 //	@Router			/users/{username} [patch]
+//	@Security		ApiKeyAuth
 func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
 	user := getRouteUser(r)
 

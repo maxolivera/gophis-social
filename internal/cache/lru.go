@@ -1,129 +1,49 @@
 package cache
 
 import (
-	"container/list"
-	"sync"
-	"time"
+	"context"
+	"errors"
+
+	"github.com/maxolivera/gophis-social-network/internal/models"
+	lru "github.com/maxolivera/gophis-social-network/pkg/lru"
 )
 
-type CacheItem struct {
-	Key        string
-	Value      any
-	Expiration time.Time
-}
-
-type LRUCache struct {
-	capacity int
-	items    map[string]*list.Element
-	order    *list.List
-	mu       sync.RWMutex
-	ttl      time.Duration
-}
-
-func NewLRUCache(capacity int, ttl time.Duration) *LRUCache {
-	cache := &LRUCache{
-		capacity: capacity,
-		items:    make(map[string]*list.Element),
-		order:    list.New(),
-		ttl:      ttl,
-	}
-	go cache.cleanupExpired()
-	return cache
-}
-
-func NewLRUStorage(c *LRUCache) *Storage {
+func NewLRUStorage(c *lru.LRUCache) *Storage {
 	return &Storage{
 		Users: &UserLRUCache{c},
 	}
 }
 
-func (c *LRUCache) Get(key string) (any, bool) {
-	c.mu.RLock()
-	el, found := c.items[key]
-	c.mu.RUnlock()
-
-	if found {
-		item := el.Value.(*CacheItem)
-		if time.Now().After(item.Expiration) {
-			c.mu.Lock()
-			c.Delete(key)
-			c.mu.Unlock()
-			return nil, false
-		}
-		c.mu.Lock()
-		c.order.MoveToFront(el)
-		c.mu.Unlock()
-		return item.Value, true
-	}
-	return nil, false
+type UserLRUCache struct {
+	c *lru.LRUCache
 }
 
-func (c *LRUCache) Set(key string, value any) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// exists, update it
-	if el, found := c.items[key]; found {
-		c.order.MoveToFront(el)
-		el.Value.(*CacheItem).Value = value
-		el.Value.(*CacheItem).Expiration = time.Now().Add(c.ttl)
-		return
+func (u UserLRUCache) Get(ctx context.Context, username string) (*models.User, error) {
+	key := "user-" + username
+	value, found := u.c.Get(ctx, key)
+	if !found {
+		return nil, nil
 	}
 
-	// capacity full, evict oldest
-	if len(c.items) >= c.capacity {
-		evict := c.order.Back()
-		if evict != nil {
-			c.order.Remove(evict)
-			delete(c.items, evict.Value.(*CacheItem).Key)
-		}
+	user, ok := value.(*models.User)
+	if !ok {
+		return nil, errors.New("value is not an user")
 	}
 
-	// add new item
-	item := &CacheItem{
-		Key:        key,
-		Value:      value,
-		Expiration: time.Now().Add(c.ttl),
-	}
-	el := c.order.PushFront(item)
-	c.items[key] = el
+	return user, nil
 }
 
-func (c *LRUCache) Delete(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if el, found := c.items[key]; found {
-		c.order.Remove(el)
-		delete(c.items, key)
-	}
+func (u UserLRUCache) Set(ctx context.Context, user *models.User) error {
+	key := "user-" + user.Username
+	u.c.Set(ctx, key, user)
+	return nil
 }
 
-func (c *LRUCache) cleanupExpired() {
-	for {
-		time.Sleep(c.ttl / 2) // Cleanup frequency
+func (u UserLRUCache) Delete(ctx context.Context, username string) {
+	key := "user-" + username
+	u.c.Delete(ctx, key)
+}
 
-		c.mu.RLock()
-		now := time.Now()
-
-		toDelete := []string{}
-
-		for el := c.order.Back(); el != nil; el = el.Prev() {
-			item := el.Value.(*CacheItem)
-			if now.After(item.Expiration) {
-				toDelete = append(toDelete, item.Key)
-			}
-		}
-		c.mu.RUnlock()
-
-		// Delete expired items with a write lock
-		c.mu.Lock()
-		for _, key := range toDelete {
-			if el, found := c.items[key]; found {
-				c.order.Remove(el)
-				delete(c.items, key)
-			}
-		}
-		c.mu.Unlock()
-	}
+func (u UserLRUCache) Len(ctx context.Context) int {
+	return u.c.Len(ctx)
 }

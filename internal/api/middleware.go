@@ -267,7 +267,11 @@ func (app *Application) getUser(r *http.Request, username string) (*models.User,
 
 	elapsed := time.Since(start)
 
-	app.Logger.Infow("fetching user", "cache hit", hit, "total time", elapsed)
+	app.Logger.Infow("fetching user",
+		"in cache", hit,
+		"total time", elapsed,
+		"fill", float32(app.Cache.Users.Len(ctx))/float32(app.Config.Cache.LRU.Capacity)*100,
+	)
 
 	// 4. Return user
 	return user, nil

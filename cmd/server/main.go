@@ -11,6 +11,7 @@ import (
 	"github.com/maxolivera/gophis-social-network/internal/cache"
 	"github.com/maxolivera/gophis-social-network/internal/database"
 	"github.com/maxolivera/gophis-social-network/internal/env"
+	lru "github.com/maxolivera/gophis-social-network/pkg/lru"
 	"go.uber.org/zap"
 )
 
@@ -97,7 +98,7 @@ func main() {
 				Capacity: lruCap,
 				TTL:      time.Duration(lruTTL) * time.Minute,
 			}
-			lru := cache.NewLRUCache(cacheConfig.LRU.Capacity, cacheConfig.LRU.TTL)
+			lru := lru.NewLRUCache(cacheConfig.LRU.Capacity, cacheConfig.LRU.TTL)
 			cacheStorage = cache.NewLRUStorage(lru)
 		}
 	} else {
