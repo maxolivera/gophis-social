@@ -3,3 +3,6 @@
 
 # Docs, which are automatically genereted with swag
 docs
+
+# TODO, only used on a coding session
+todo.md
