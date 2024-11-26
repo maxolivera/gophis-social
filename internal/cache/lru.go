@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/maxolivera/gophis-social-network/internal/models"
+	"github.com/maxolivera/gophis-social-network/internal/storage/models"
 	lru "github.com/maxolivera/gophis-social-network/pkg/lru"
 )
 
