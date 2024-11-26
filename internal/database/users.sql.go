@@ -11,15 +11,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const activateUser = `-- name: ActivateUser :exec
+const activateUser = `-- name: ActivateUser :one
 UPDATE users
 SET is_active = true
 WHERE id = $1
+RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active, role_id
 `
 
-func (q *Queries) ActivateUser(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, activateUser, id)
-	return err
+func (q *Queries) ActivateUser(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, activateUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Username,
+		&i.Email,
+		&i.Password,
+		&i.FirstName,
+		&i.LastName,
+		&i.IsDeleted,
+		&i.IsActive,
+		&i.RoleID,
+	)
+	return i, err
 }
 
 const createInvitation = `-- name: CreateInvitation :exec
@@ -38,10 +53,9 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 	return err
 }
 
-const createUser = `-- name: CreateUser :one
+const createUser = `-- name: CreateUser :exec
 INSERT INTO users (id, created_at, updated_at, username, email, password)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, created_at, updated_at, username, email, password, first_name, last_name, is_deleted, is_active, role_id
 `
 
 type CreateUserParams struct {
@@ -53,8 +67,8 @@ type CreateUserParams struct {
 	Password  []byte
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser,
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
+	_, err := q.db.Exec(ctx, createUser,
 		arg.ID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -62,21 +76,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.Email,
 		arg.Password,
 	)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Username,
-		&i.Email,
-		&i.Password,
-		&i.FirstName,
-		&i.LastName,
-		&i.IsDeleted,
-		&i.IsActive,
-		&i.RoleID,
-	)
-	return i, err
+	return err
 }
 
 const deleteToken = `-- name: DeleteToken :exec
@@ -190,18 +190,15 @@ func (q *Queries) HardDeleteUserByID(ctx context.Context, id pgtype.UUID) error 
 	return err
 }
 
-const softDeleteUserByID = `-- name: SoftDeleteUserByID :one
+const softDeleteUserByID = `-- name: SoftDeleteUserByID :exec
 UPDATE users
 SET is_deleted = true
 WHERE id = $1
-RETURNING is_deleted
 `
 
-func (q *Queries) SoftDeleteUserByID(ctx context.Context, id pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, softDeleteUserByID, id)
-	var is_deleted bool
-	err := row.Scan(&is_deleted)
-	return is_deleted, err
+func (q *Queries) SoftDeleteUserByID(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteUserByID, id)
+	return err
 }
 
 const updateUser = `-- name: UpdateUser :one

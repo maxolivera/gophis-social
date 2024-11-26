@@ -1,10 +1,9 @@
--- name: CreatePost :one
+-- name: CreatePost :exec
 INSERT INTO posts (id, created_at, updated_at, user_id, title, content, tags)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING *;
+VALUES ($1, $2, $3, $4, $5, $6, $7);
 
--- name: HardDeletePostByID :one
-DELETE FROM posts WHERE id = $1 and version = $2 RETURNING *;
+-- name: HardDeletePostByID :exec
+DELETE FROM posts WHERE id = $1 and version = $2;
 
 -- name: SoftDeletePostByID :one
 UPDATE posts

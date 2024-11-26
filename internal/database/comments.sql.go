@@ -11,10 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createCommentInPost = `-- name: CreateCommentInPost :one
+const createCommentInPost = `-- name: CreateCommentInPost :exec
 INSERT INTO comments (id, user_id, post_id, created_at, updated_at, content)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, post_id, user_id, created_at, updated_at, content
 `
 
 type CreateCommentInPostParams struct {
@@ -26,8 +25,8 @@ type CreateCommentInPostParams struct {
 	Content   string
 }
 
-func (q *Queries) CreateCommentInPost(ctx context.Context, arg CreateCommentInPostParams) (Comment, error) {
-	row := q.db.QueryRow(ctx, createCommentInPost,
+func (q *Queries) CreateCommentInPost(ctx context.Context, arg CreateCommentInPostParams) error {
+	_, err := q.db.Exec(ctx, createCommentInPost,
 		arg.ID,
 		arg.UserID,
 		arg.PostID,
@@ -35,16 +34,7 @@ func (q *Queries) CreateCommentInPost(ctx context.Context, arg CreateCommentInPo
 		arg.UpdatedAt,
 		arg.Content,
 	)
-	var i Comment
-	err := row.Scan(
-		&i.ID,
-		&i.PostID,
-		&i.UserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Content,
-	)
-	return i, err
+	return err
 }
 
 const getCommentsByPost = `-- name: GetCommentsByPost :many

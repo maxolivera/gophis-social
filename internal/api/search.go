@@ -8,16 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/maxolivera/gophis-social-network/internal/database"
-	"github.com/maxolivera/gophis-social-network/internal/models"
+	"github.com/maxolivera/gophis-social-network/internal/storage"
 )
 
 // Search godoc
 //
 //	@Summary		Search posts
-//	@Description	Search posts according to parameters. Is likely that in future some kind of auth will be required
+//	@Description	Search posts according to parameters.
 //	@tags			posts
 //	@Accept			json
 //	@Produce		json
@@ -31,6 +28,7 @@ import (
 //	@Failure		404		{object}	error "No posts with selected parameters"
 //	@Failure		500		{object}	error
 //	@Router			/v1/search [get]
+//	@Security		ApiKeyAuth
 func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 	/*
 		Filter parameters:
@@ -38,64 +36,61 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 		* Search (fuzzy search)
 		* Since
 	*/
-	params := database.SearchPostsParams{
-		Search: "",
-		Tags:   nil,
-		Limit:  10,    // Default limit
-		Offset: 0,     // Default offset
-		Sort:   false, // Default sort order
-	}
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second*3)
+	defer cancel()
+
 	url := r.URL.Query()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-	defer cancel()
+	var word string
+	var tags []string
+	var limit int32
+	var offset int32
+	var sort bool
+	var since *time.Time
+	var until *time.Time
 
 	// tags
 	tagsStr := url.Get("tags")
 	if tagsStr != "" {
-		tags := strings.Split(tagsStr, ",")
+		splittedTags := strings.Split(tagsStr, ",")
 		if tags != nil {
-			params.Tags = tags
+			tags = splittedTags
 		}
 	}
 
 	// search
 	search := url.Get("search")
 	if search != "" {
-		params.Search = search
+		word = search
 	}
 
 	// dates
 	sinceStr := url.Get("since")
-	var since time.Time
 	if sinceStr != "" {
-		var err error
-		since, err = time.Parse("2006-01-02", sinceStr)
+		sinceDate, err := time.Parse("2006-01-02", sinceStr)
 		if err != nil {
 			err = fmt.Errorf("could not parse date: %v\n", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			return
 		}
-		params.Since = pgtype.Timestamp{Time: since}
+		since = &sinceDate
 	}
+
 	untilStr := url.Get("until")
-	var until time.Time
 	if untilStr != "" {
-		var err error
-		until, err = time.Parse("2006-01-02", untilStr)
+		untilDate, err := time.Parse("2006-01-02", untilStr)
 		if err != nil {
 			err = fmt.Errorf("could not parse date: %v\n", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			return
 		}
-		params.Until = pgtype.Timestamp{Time: until}
+		until = &untilDate
 	}
 
 	// limit and offset
 	limitStr := url.Get("limit")
 	if limitStr != "" {
-		limit, err := strconv.Atoi(limitStr)
+		limitInt, err := strconv.Atoi(limitStr)
 		if err != nil {
 			err = fmt.Errorf("could not parse limit into int: %v", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
@@ -104,55 +99,51 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 			if limit >= 20 {
 				limit = 20
 			}
-			params.Limit = int32(limit)
+			limit = int32(limitInt)
 		}
 	} else {
-		params.Limit = 20
+		limit = -1
 	}
+
 	offsetStr := url.Get("offset")
 	if offsetStr != "" {
-		offset, err := strconv.Atoi(offsetStr)
+		offsetInt, err := strconv.Atoi(offsetStr)
 		if err != nil {
 			err = fmt.Errorf("could not parse limit into int: %v", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			return
 		} else {
-			params.Offset = int32(offset)
+			offset = int32(offsetInt)
 		}
 	} else {
-		params.Offset = 0
+		offset = -1
 	}
 
 	// sort
-	sort := url.Get("sort")
-	if sort != "desc" && sort != "asc" {
+	sortStr := url.Get("sort")
+	if sortStr != "desc" && sortStr != "asc" {
 		// asume desc
-		params.Sort = true
+		sort = true
 	} else {
-		if sort == "desc" {
-			params.Sort = true
+		if sortStr == "desc" {
+			sort = true
 		} else {
-			params.Sort = false
+			sort = false
 		}
 	}
 
-	dbFeed, err := app.Database.SearchPosts(ctx, params)
+	feed, err := app.Storage.Posts.Search(
+		ctx, word, tags, limit, offset, sort, since, until,
+	)
 	if err != nil {
 		switch err {
-		case pgx.ErrNoRows:
+		case storage.ErrNoRows:
 			err = fmt.Errorf("no rows: %v", err)
 			app.respondWithError(w, r, http.StatusNotFound, err, "no posts with these parameters")
 		default:
-			err = fmt.Errorf("error when retrieving posts with filter parameters %v, err: %v", params, err)
+			err = fmt.Errorf("error when retrieving posts with filter parameters, err: %v", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		}
-		return
-	}
-
-	feed, err := models.DBFeedsToFeeds(dbFeed)
-	if err != nil {
-		err = fmt.Errorf("error during parsing: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
 

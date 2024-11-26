@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/maxolivera/gophis-social-network/internal/models"
+	"github.com/maxolivera/gophis-social-network/internal/storage/models"
 )
 
 type Storage struct {

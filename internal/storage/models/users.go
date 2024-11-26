@@ -7,15 +7,22 @@ import (
 	"github.com/maxolivera/gophis-social-network/internal/database"
 )
 
+// Do not hold the password
 type User struct {
 	ID        uuid.UUID   `json:"id"`
 	CreatedAt time.Time   `json:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at"`
 	Email     string      `json:"email"`
 	Username  string      `json:"username"`
-	FirstName string      `json:"first_name"`
-	LastName  string      `json:"last_name"`
+	FirstName string      `json:"first_name,omitempty"`
+	LastName  string      `json:"last_name,omitempty"`
 	Role      ReducedRole `json:"role"`
+}
+
+// It has the real password. Should never be used besides on storage layers.
+type UserWithPassword struct {
+	User     User
+	Password string
 }
 
 // Special type for Feed, do not contain CreatedAt, UpdatedAt, Email, FirstName, LastName
@@ -24,8 +31,8 @@ type ReducedUser struct {
 	Username string    `json:"username"`
 }
 
-func DBUserToUser(dbUser database.User) User {
-	return User{
+func DBUserToUser(dbUser database.User) *User {
+	return &User{
 		ID:        dbUser.ID.Bytes,
 		CreatedAt: dbUser.CreatedAt.Time,
 		UpdatedAt: dbUser.UpdatedAt.Time,
@@ -36,8 +43,8 @@ func DBUserToUser(dbUser database.User) User {
 	}
 }
 
-func DBUsersToUser(dbUsers []database.User) []User {
-	users := make([]User, len(dbUsers))
+func DBUsersToUser(dbUsers []database.User) []*User {
+	users := make([]*User, len(dbUsers))
 	for i, dbUser := range dbUsers {
 		users[i] = DBUserToUser(dbUser)
 	}

@@ -5,7 +5,6 @@ LEFT JOIN users ON comments.user_id = users.id
 WHERE comments.post_id = $1
 ORDER BY comments.created_at DESC;
 
--- name: CreateCommentInPost :one
+-- name: CreateCommentInPost :exec
 INSERT INTO comments (id, user_id, post_id, created_at, updated_at, content)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING *;
+VALUES ($1, $2, $3, $4, $5, $6);

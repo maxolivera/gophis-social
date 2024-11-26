@@ -1,15 +1,14 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/maxolivera/gophis-social-network/internal/database"
-	"github.com/maxolivera/gophis-social-network/internal/models"
+	"github.com/maxolivera/gophis-social-network/internal/storage"
+	"github.com/maxolivera/gophis-social-network/internal/storage/models"
 )
 
 const MAX_TITLE_LENGTH = 200
@@ -35,6 +34,7 @@ type CreatePostPayload struct {
 //	@Security		ApiKeyAuth
 //	@Router			/posts [post]
 func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	in := CreatePostPayload{}
 	if err := readJSON(w, r, &in); err != nil {
 		err := fmt.Errorf("error during JSON decoding: %v", err)
@@ -62,36 +62,23 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 
 	// create post
 	id := uuid.New()
-	pgID := pgtype.UUID{Bytes: id, Valid: true}
-
 	user := getLoggedUser(r)
-	pgUserID := pgtype.UUID{Bytes: user.ID, Valid: true}
-
 	currentTime := time.Now().UTC()
-	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
 
-	postParams := database.CreatePostParams{
-		ID:        pgID,
-		UserID:    pgUserID,
-		CreatedAt: pgTime,
-		UpdatedAt: pgTime,
+	post := &models.Post{
+		ID:        id,
+		UserID:    user.ID,
+		CreatedAt: currentTime,
+		UpdatedAt: currentTime,
 		Title:     in.Title,
 		Content:   in.Content,
 		Tags:      in.Tags,
 	}
-
 	// store user
-	dbPost, err := app.Database.CreatePost(
-		r.Context(),
-		postParams,
-	)
+	err := app.Storage.Posts.Create(ctx, post)
 	if err != nil {
-		err := fmt.Errorf("error during user creation: %v", err)
 		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
 	}
-
-	post := models.DBPostToPost(dbPost)
 
 	// Send response
 	app.respondWithJSON(w, r, http.StatusOK, post)
@@ -110,7 +97,7 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 //	@Security		ApiKeyAuth
 //	@Router			/posts/{postID} [get]
 func (app *Application) handlerGetPost(w http.ResponseWriter, r *http.Request) {
-	post := getPostFromCtx(r)
+	post := getPost(r)
 
 	app.respondWithJSON(w, r, http.StatusOK, post)
 }
@@ -128,32 +115,18 @@ func (app *Application) handlerGetPost(w http.ResponseWriter, r *http.Request) {
 //	@Security		ApiKeyAuth
 //	@Router			/posts/{postID} [delete]
 func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Request) {
-	post := getPostFromCtx(r)
-	pgID := pgtype.UUID{
-		Bytes: post.ID,
-		Valid: true,
-	}
+	ctx := r.Context()
+	post := getPost(r)
 
-	params := database.SoftDeletePostByIDParams{
-		ID:      pgID,
-		Version: post.Version,
-	}
-
-	deleted, err := app.Database.SoftDeletePostByID(r.Context(), params)
+	err := app.Storage.Posts.SoftDelete(ctx, post)
 	if err != nil {
 		switch err {
-		case pgx.ErrNoRows:
-			err := fmt.Errorf("post was not deleted because was not found post_id: %v", post.ID)
-			app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
+		case storage.ErrNoRows:
+			err := errors.New("post not found")
+			app.respondWithError(w, r, http.StatusNotFound, err, err.Error())
 		default:
-			err := fmt.Errorf("post could not deleted: %v", err)
-			app.respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		}
-		return
-	}
-	if !deleted {
-		err := fmt.Errorf("post was not deleted, post_id: %v", post.ID)
-		app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
 		return
 	}
 
@@ -173,26 +146,17 @@ func (app *Application) handlerSoftDeletePost(w http.ResponseWriter, r *http.Req
 //	@Security		ApiKeyAuth
 //	@Router			/posts/{postID}/hard [delete]
 func (app *Application) handlerHardDeletePost(w http.ResponseWriter, r *http.Request) {
-	post := getPostFromCtx(r)
-	pgID := pgtype.UUID{
-		Bytes: post.ID,
-		Valid: true,
-	}
+	ctx := r.Context()
+	post := getPost(r)
 
-	params := database.HardDeletePostByIDParams{
-		ID:      pgID,
-		Version: post.Version,
-	}
-
-	_, err := app.Database.HardDeletePostByID(r.Context(), params)
+	err := app.Storage.Posts.HardDelete(ctx, post)
 	if err != nil {
 		switch err {
-		case pgx.ErrNoRows:
-			err := fmt.Errorf("post not deleted, not found, post id: %v error: %v", post.ID, err)
-			app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
+		case storage.ErrNoRows:
+			err := errors.New("post not found")
+			app.respondWithError(w, r, http.StatusNotFound, err, err.Error())
 		default:
-			err := fmt.Errorf("post could not deleted: %v", err)
-			app.respondWithError(w, r, http.StatusInternalServerError, err, "post could not be deleted")
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		}
 		return
 	}
@@ -209,7 +173,7 @@ type UpdatePostPayload struct {
 // Update Post godoc
 //
 //	@Summary		Updates a Post
-//	@Description	The post will be updated. In future will require auth.
+//	@Description	Updates a Post.
 //	@Tags			posts
 //	@Produce		json
 //	@Param			postID	path		string				true	"Post ID"
@@ -220,7 +184,8 @@ type UpdatePostPayload struct {
 //	@Security		ApiKeyAuth
 //	@Router			/posts/{postID} [patch]
 func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request) {
-	post := getPostFromCtx(r)
+	ctx := r.Context()
+	post := getPost(r)
 
 	in := UpdatePostPayload{}
 	if err := readJSON(w, r, &in); err != nil {
@@ -228,34 +193,24 @@ func (app *Application) handlerUpdatePost(w http.ResponseWriter, r *http.Request
 		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 	}
 
-	currentTime := time.Now().UTC()
-	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
-	pgContent := pgtype.Text{String: in.Content, Valid: len(in.Content) > 0}
-	pgTitle := pgtype.Text{String: in.Title, Valid: len(in.Title) > 0}
-	pgID := pgtype.UUID{Bytes: post.ID, Valid: true}
-
-	params := database.UpdatePostParams{
-		UpdatedAt: pgTime,
-		ID:        pgID,
-		Content:   pgContent,
-		Title:     pgTitle,
-		Tags:      in.Tags,
-		Version:   post.Version,
+	newPost := &models.Post{
+		Title:   in.Title,
+		Content: in.Content,
+		Tags:    in.Tags,
+		Version: post.Version,
 	}
 
-	newDBPost, err := app.Database.UpdatePost(r.Context(), params)
+	updatedPost, err := app.Storage.Posts.Update(ctx, newPost)
 	if err != nil {
 		switch err {
-		// NOTE(maolivera): Considering that already retrieving with `getPostFromCtx`, is unlikely that this will happen.
-		case pgx.ErrNoRows:
+		case storage.ErrNoRows:
+			err = fmt.Errorf("post with id: %v not found", post.ID)
 			app.respondWithError(w, r, http.StatusNotFound, err, "post not found")
 		default:
-			err := fmt.Errorf("post could not updated: %v", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		}
 		return
 	}
-	newPost := models.DBPostToPost(newDBPost)
 
-	app.respondWithJSON(w, r, http.StatusOK, newPost)
+	app.respondWithJSON(w, r, http.StatusOK, updatedPost)
 }

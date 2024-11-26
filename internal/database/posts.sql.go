@@ -11,10 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createPost = `-- name: CreatePost :one
+const createPost = `-- name: CreatePost :exec
 INSERT INTO posts (id, created_at, updated_at, user_id, title, content, tags)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, created_at, updated_at, title, content, user_id, tags, is_deleted, version
 `
 
 type CreatePostParams struct {
@@ -27,8 +26,8 @@ type CreatePostParams struct {
 	Tags      []string
 }
 
-func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, error) {
-	row := q.db.QueryRow(ctx, createPost,
+func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) error {
+	_, err := q.db.Exec(ctx, createPost,
 		arg.ID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -37,19 +36,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 		arg.Content,
 		arg.Tags,
 	)
-	var i Post
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Title,
-		&i.Content,
-		&i.UserID,
-		&i.Tags,
-		&i.IsDeleted,
-		&i.Version,
-	)
-	return i, err
+	return err
 }
 
 const getPostById = `-- name: GetPostById :one
@@ -107,8 +94,8 @@ func (q *Queries) GetPostByUser(ctx context.Context, userID pgtype.UUID) ([]Post
 	return items, nil
 }
 
-const hardDeletePostByID = `-- name: HardDeletePostByID :one
-DELETE FROM posts WHERE id = $1 and version = $2 RETURNING id, created_at, updated_at, title, content, user_id, tags, is_deleted, version
+const hardDeletePostByID = `-- name: HardDeletePostByID :exec
+DELETE FROM posts WHERE id = $1 and version = $2
 `
 
 type HardDeletePostByIDParams struct {
@@ -116,21 +103,9 @@ type HardDeletePostByIDParams struct {
 	Version int32
 }
 
-func (q *Queries) HardDeletePostByID(ctx context.Context, arg HardDeletePostByIDParams) (Post, error) {
-	row := q.db.QueryRow(ctx, hardDeletePostByID, arg.ID, arg.Version)
-	var i Post
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Title,
-		&i.Content,
-		&i.UserID,
-		&i.Tags,
-		&i.IsDeleted,
-		&i.Version,
-	)
-	return i, err
+func (q *Queries) HardDeletePostByID(ctx context.Context, arg HardDeletePostByIDParams) error {
+	_, err := q.db.Exec(ctx, hardDeletePostByID, arg.ID, arg.Version)
+	return err
 }
 
 const softDeletePostByID = `-- name: SoftDeletePostByID :one

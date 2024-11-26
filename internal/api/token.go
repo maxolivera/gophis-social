@@ -9,9 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/jackc/pgx/v5"
-	"github.com/maxolivera/gophis-social-network/internal/models"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/maxolivera/gophis-social-network/internal/storage"
 )
 
 type CreateTokenPayload struct {
@@ -50,8 +48,8 @@ func (app *Application) handlerCreateToken(w http.ResponseWriter, r *http.Reques
 	{ // Validate input
 		// Empty input
 		if in.Email == "" || in.Password == "" {
-			err := fmt.Errorf("username and password are required: %s\n", in)
-			app.respondWithError(w, r, http.StatusBadRequest, err, "something is missing")
+			err := fmt.Errorf("email and password are required: %s\n", in)
+			app.respondWithError(w, r, http.StatusBadRequest, err, "email and password are required")
 			return
 		}
 		// Email
@@ -77,10 +75,10 @@ func (app *Application) handlerCreateToken(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	dbUser, err := app.Database.GetUserByEmail(ctx, in.Email)
+	user, err := app.Storage.Users.GetByEmailAndPassword(ctx, in.Email, in.Password)
 	if err != nil {
 		switch err {
-		case pgx.ErrNoRows:
+		case storage.ErrNoRows:
 			// NOTE(maolivera): Returning 404 is insecure
 			app.unauthorizedBasicErrorResponse(w, r, err)
 		default:
@@ -88,16 +86,6 @@ func (app *Application) handlerCreateToken(w http.ResponseWriter, r *http.Reques
 		}
 		return
 	}
-
-	// compare password
-	err = bcrypt.CompareHashAndPassword(dbUser.Password, []byte(in.Password))
-	if err != nil {
-		err := fmt.Errorf("error when hashing password: %v", err)
-		app.unauthorizedBasicErrorResponse(w, r, err)
-		return
-	}
-
-	user := models.DBUserToUser(dbUser)
 
 	claims := jwt.MapClaims{
 		"sub": user.Username,

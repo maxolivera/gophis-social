@@ -6,9 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/maxolivera/gophis-social-network/internal/database"
-	"github.com/maxolivera/gophis-social-network/internal/models"
+	"github.com/maxolivera/gophis-social-network/internal/storage"
 )
 
 type FeedPayload struct {
@@ -33,6 +31,7 @@ type FeedPayload struct {
 func (app *Application) handlerFeed(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
 	defer cancel()
+	user := getLoggedUser(r)
 
 	in := FeedPayload{}
 	if err := readJSON(w, r, &in); err != nil {
@@ -41,28 +40,15 @@ func (app *Application) handlerFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := getLoggedUser(r)
-	pgID := pgtype.UUID{Bytes: user.ID, Valid: true}
-
-	params := database.GetUserFeedParams{
-		UserID: pgID,
-		Sort:   in.Sort,
-		Limit:  in.Limit,
-		Offset: in.Offset,
-	}
-
-	dbFeed, err := app.Database.GetUserFeed(ctx, params)
+	feed, err := app.Storage.Posts.GetFeed(ctx, user, in.Sort, in.Limit, in.Offset)
 	if err != nil {
-		// TODO(maolivera): Better error messages and HTTP responses
-		err := fmt.Errorf("error retrieving feed for user %v, err: %v", user.Username, err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-
-	feed, err := models.DBFeedsToFeeds(dbFeed)
-	if err != nil {
-		err = fmt.Errorf("error during parsing: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+		if err == storage.ErrNoRows {
+			err = fmt.Errorf("no posts for user %s, with limit %d and offset %d", user.Username, in.Limit, in.Offset)
+			app.respondWithError(w, r, http.StatusNotFound, err, "no posts for feed")
+		} else {
+			err := fmt.Errorf("error retrieving feed for user %v, err: %v", user.Username, err)
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+		}
 		return
 	}
 

@@ -16,8 +16,8 @@ import (
 	"github.com/maxolivera/gophis-social-network/docs"
 	"github.com/maxolivera/gophis-social-network/internal/auth"
 	"github.com/maxolivera/gophis-social-network/internal/cache"
-	"github.com/maxolivera/gophis-social-network/internal/database"
-	"github.com/maxolivera/gophis-social-network/internal/models"
+	"github.com/maxolivera/gophis-social-network/internal/storage"
+	"github.com/maxolivera/gophis-social-network/internal/storage/models"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.uber.org/zap"
 )
@@ -25,7 +25,7 @@ import (
 type Application struct {
 	Config        *Config
 	Pool          *pgxpool.Pool
-	Database      *database.Queries
+	Storage       *storage.Storage
 	Cache         *cache.Storage
 	Logger        *zap.SugaredLogger
 	Authenticator auth.Authenticator
@@ -154,7 +154,7 @@ func (app *Application) GetHandlers() http.Handler {
 	docs.SwaggerInfo.BasePath = "/v1"
 
 	r.Route("/v1", func(r chi.Router) {
-		r.With(app.middlewareBasicAuth()).Get("/healthz", app.handlerHealthz)
+		r.With(app.middlewareBasicAuth).Get("/healthz", app.handlerHealthz)
 		r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL(docsURL)))
 
 		// Non-auth routes
@@ -176,6 +176,7 @@ func (app *Application) GetHandlers() http.Handler {
 
 				r.Put("/follow", app.handlerFollowUser)
 				r.Put("/unfollow", app.handlerUnfollowUser)
+
 			})
 		})
 
@@ -190,6 +191,8 @@ func (app *Application) GetHandlers() http.Handler {
 				r.Patch("/", app.middlewarePostPermissions(models.RoleModerator, true, app.handlerUpdatePost))
 				r.Delete("/", app.middlewarePostPermissions(models.RoleAdmin, true, app.handlerSoftDeletePost))
 				r.Delete("/hard", app.middlewarePostPermissions(models.RoleAdmin, false, app.handlerHardDeletePost))
+
+				r.Post("/comment", app.handlerCreateComment)
 			})
 		})
 

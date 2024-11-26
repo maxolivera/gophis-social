@@ -13,11 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/maxolivera/gophis-social-network/internal/database"
-	"github.com/maxolivera/gophis-social-network/internal/models"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/maxolivera/gophis-social-network/internal/storage"
+	"github.com/maxolivera/gophis-social-network/internal/storage/models"
 )
 
 type CreateUserPayload struct {
@@ -60,7 +57,7 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 		// Empty input
 		if in.Username == "" || in.Email == "" || in.Password == "" {
 			err := fmt.Errorf("username, email, and password are required: %s\n", in)
-			app.respondWithError(w, r, http.StatusBadRequest, err, "something is missing")
+			app.respondWithError(w, r, http.StatusBadRequest, err, "username, email and password are required")
 			return
 		}
 		// Username
@@ -93,91 +90,41 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// hash password
-	hashed, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
-	if err != nil {
-		err := fmt.Errorf("error when hashing password: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-
-	// Start transaction
-	tx, err := app.Pool.Begin(ctx)
-	if err != nil {
-		err := fmt.Errorf("error starting transaction: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-	defer tx.Rollback(ctx)
-	qtx := app.Database.WithTx(tx)
-
-	// 1. Create user
+	// Create user
 	id := uuid.New()
-	pgID := pgtype.UUID{
-		Bytes: id,
-		Valid: true,
-	}
 	currentTime := time.Now().UTC()
-	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
-
-	userParams := database.CreateUserParams{
-		ID:        pgID,
-		CreatedAt: pgTime,
-		UpdatedAt: pgTime,
-		Username:  in.Username,
-		Email:     in.Email,
-		Password:  hashed,
+	user := &models.UserWithPassword{
+		User: models.User{
+			ID:        id,
+			CreatedAt: currentTime,
+			UpdatedAt: currentTime,
+			Email:     in.Email,
+			Username:  in.Username,
+		},
+		Password: in.Password,
 	}
-	// store user
-	dbUser, err := qtx.CreateUser(r.Context(), userParams)
-	if err != nil {
-		if pgErr, ok := err.(*pgconn.PgError); ok {
-			switch pgErr.ConstraintName {
-			case "users_username_key":
-				msg := "username not available"
-				err = fmt.Errorf("%s: %v", msg, err)
-				app.respondWithError(w, r, http.StatusConflict, err, msg)
-				return
-			case "users_email_key":
-				msg := "email not available"
-				err = fmt.Errorf("%s: %v", msg, err)
-				app.respondWithError(w, r, http.StatusConflict, err, msg)
-				return
-			default:
-				err = fmt.Errorf("error during user creation: %v", err)
-			}
-		} else {
-			err = fmt.Errorf("error during user creation: %v", err)
-		}
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-	user := models.DBUserToUser(dbUser)
 
-	// 2. Create user invite
+	// Create Invitation Token
 	token := make([]byte, 32)
-	_, err = rand.Read(token)
+	_, err := rand.Read(token)
 	if err != nil {
 		err = fmt.Errorf("error creating token: %v", err)
 		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
-	pgExpires := pgtype.Timestamp{Time: currentTime.Add(app.Config.ExpirationTime), Valid: true}
-	invitationParams := database.CreateInvitationParams{
-		UserID:    pgID,
-		Token:     token,
-		ExpiresAt: pgExpires,
-	}
-	if err := qtx.CreateInvitation(ctx, invitationParams); err != nil {
-		err = fmt.Errorf("error storing token: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
 
-	// 3. Commit transaction
-	if err = tx.Commit(ctx); err != nil {
-		err = fmt.Errorf("error commiting user creation transaction: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+	if err = app.Storage.Users.CreateAndInvite(ctx, user, token, app.Config.ExpirationTime); err != nil {
+		switch err {
+		case storage.ErrUsernameUnavailable:
+			err = fmt.Errorf("%v, username: %s", err, user.User.Username)
+			app.respondWithError(w, r, http.StatusConflict, err, "username is not available")
+		case storage.ErrEmailUnavailable:
+			err = fmt.Errorf("%v, email: %s", err, user.User.Email)
+			app.respondWithError(w, r, http.StatusConflict, err, "email is not available")
+		default:
+			err = fmt.Errorf("error during user creation: %v", err)
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+		}
 		return
 	}
 
@@ -186,7 +133,7 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 	// TODO(maolivera): Check if this is the correct way of encoding and decoding token for URLs
 	encodedToken := base64.URLEncoding.EncodeToString(token)
 	out := UserWithToken{
-		User:            user,
+		User:            user.User,
 		ActivationToken: encodedToken,
 	}
 
@@ -212,6 +159,7 @@ func (app *Application) handlerActivateUser(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
+	// Decode token
 	// TODO(maolivera): Check if this is the correct way of encoding and decoding token for URLs
 	tokenStr := r.PathValue("token")
 	if tokenStr == "" {
@@ -234,53 +182,23 @@ func (app *Application) handlerActivateUser(w http.ResponseWriter, r *http.Reque
 
 	app.Logger.Debugw("token decoded", "token", fmt.Sprintf("%x", token))
 
-	// 0. Start transaction
-	tx, err := app.Pool.Begin(ctx)
-	if err != nil {
-		err := fmt.Errorf("error starting transaction: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-	defer tx.Rollback(ctx)
-	qtx := app.Database.WithTx(tx)
+	user, err := app.Storage.Users.Activate(ctx, token)
 
-	// 1. Validate token
-	id, err := qtx.GetInvitation(ctx, database.GetInvitationParams{
-		Token:     token,
-		ExpiresAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
-	})
 	if err != nil {
 		switch err {
-		case pgx.ErrNoRows:
-			app.respondWithError(w, r, http.StatusNotFound, err, "expired or invalid token")
+		case storage.ErrNoToken:
+			err = fmt.Errorf("token not found or expired: %x", token)
+			app.respondWithError(w, r, http.StatusNotFound, err, "token not found or expired")
+		case storage.ErrNoUser:
+			// NOTE(maolivera): I suppose this could happen if the user tries to activate the user AFTER deleting the account
+			app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
 		default:
-			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
+			err = fmt.Errorf("error during user activation: %v", err)
+			app.respondWithError(w, r, http.StatusInternalServerError, err, "token not found")
 		}
 		return
 	}
-
-	// 2. Activate user
-	if err = qtx.ActivateUser(ctx, id); err != nil {
-		// NOTE(maolivera): It should exists as the user_id on user_invitations table is "DELETE ON CASCADE", so the user should always exists
-		err = fmt.Errorf("error activating user: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-	app.Logger.Infow("user activated", "user_id", id.Bytes)
-
-	// 3. Delete token from DB
-	if err = qtx.DeleteToken(ctx, token); err != nil {
-		err = fmt.Errorf("error deleting token: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
-
-	// 4. Finish transaction
-	if err = tx.Commit(ctx); err != nil {
-		err = fmt.Errorf("error commiting user activation transaction: %v", err)
-		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-		return
-	}
+	app.Logger.Infow("user activated", "username", user.Username, "id", fmt.Sprintf("%x", user.ID))
 
 	// Send response
 	app.respondWithJSON(w, r, http.StatusNoContent, nil)
@@ -318,15 +236,10 @@ func (app *Application) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 //	@Router			/users/{username} [delete]
 //	@Security		ApiKeyAuth
 func (app *Application) handlerSoftDeleteUser(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	user := getRouteUser(r)
 
-	pgID := pgtype.UUID{
-		Bytes: user.ID,
-		Valid: true,
-	}
-
-	deleted, err := app.Database.SoftDeleteUserByID(r.Context(), pgID)
-	if err != nil {
+	if err := app.Storage.Users.SoftDelete(ctx, user.ID); err != nil {
 		switch err {
 		case pgx.ErrNoRows:
 			err := fmt.Errorf("user was not deleted because was not found, user_id: %v", user.ID)
@@ -337,38 +250,27 @@ func (app *Application) handlerSoftDeleteUser(w http.ResponseWriter, r *http.Req
 		}
 		return
 	}
-	if !deleted {
-		err := fmt.Errorf("user was not deleted, post_id: %v", user.ID)
-		app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
-		return
-	}
 
 	app.respondWithJSON(w, r, http.StatusNoContent, nil)
 }
 
-/*
 // Hard Delete User godoc
 //
 //	@Summary		Hard Deletes a User
 //	@Description	The user will be deleted. Currently not used.
 //	@Tags			admin, users
 //	@Produce		json
-//	@Param			username path string true "Username"
-//	@Success		204	"The user was deleted"
-//	@Failure		400	{object}	error "Some parameter was either not provided or invalid."
-//	@Failure		404	{object}	error "User not found"
-//	@Failure		500	{object}	error "Something went wrong on the server"
+//	@Param			username	path	string	true	"Username"
+//	@Success		204			"The user was deleted"
+//	@Failure		400			{object}	error	"Some parameter was either not provided or invalid."
+//	@Failure		404			{object}	error	"User not found"
+//	@Failure		500			{object}	error	"Something went wrong on the server"
 //	@Router			/users/{username}/hard [delete]
-*/
 func (app *Application) handlerHardDeleteUser(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	user := getRouteUser(r)
-	pgID := pgtype.UUID{
-		Bytes: user.ID,
-		Valid: true,
-	}
 
-	err := app.Database.HardDeleteUserByID(r.Context(), pgID)
-	if err != nil {
+	if err := app.Storage.Users.HardDelete(ctx, user.ID); err != nil {
 		switch err {
 		case pgx.ErrNoRows:
 			err := fmt.Errorf("User not deleted. Not found, user id: %v error: %v", user.ID, err)
@@ -408,6 +310,7 @@ type UpdateUserPayload struct {
 //	@Router			/users/{username} [patch]
 //	@Security		ApiKeyAuth
 func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	user := getRouteUser(r)
 
 	in := UpdateUserPayload{}
@@ -458,69 +361,36 @@ func (app *Application) handlerUpdateUser(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	currentTime := time.Now().UTC()
-	pgTime := pgtype.Timestamp{Time: currentTime, Valid: true}
-	pgEmail := pgtype.Text{String: in.Email, Valid: len(in.Email) > 0 || len(in.Email) <= 255}
-	pgUsername := pgtype.Text{String: in.Username, Valid: len(in.Username) > 0 || len(in.Username) <= 100}
-	pgFirstName := pgtype.Text{String: in.FirstName, Valid: len(in.FirstName) > 0 || len(in.FirstName) <= 100}
-	pgLastName := pgtype.Text{String: in.LastName, Valid: len(in.LastName) > 0 || len(in.LastName) <= 100}
-	var pgPassword []byte
-	if in.Password != "" {
-		hashed, err := bcrypt.GenerateFromPassword([]byte(in.Password), 14)
-		if err != nil {
-			err := fmt.Errorf("error when hashing password: %v", err)
-			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
-			return
-		}
-		pgPassword = hashed
-	} else {
-		pgPassword = nil
-	}
-	pgID := pgtype.UUID{Bytes: user.ID, Valid: true}
 
-	params := database.UpdateUserParams{
-		UpdatedAt: pgTime,
-		ID:        pgID,
-		Username:  pgUsername,
-		Email:     pgEmail,
-		FirstName: pgFirstName,
-		LastName:  pgLastName,
-		Password:  pgPassword,
+	newUser := &models.UserWithPassword{
+		User: models.User{
+			Email:     in.Email,
+			Username:  in.Username,
+			FirstName: in.FirstName,
+			LastName:  in.LastName,
+		},
+		Password: in.Password,
 	}
 
-	newDBUser, err := app.Database.UpdateUser(r.Context(), params)
+	changedUser, err := app.Storage.Users.Update(ctx, newUser)
 	if err != nil {
-		if pgErr, ok := err.(*pgconn.PgError); ok {
-			switch pgErr.ConstraintName {
-			case "users_username_key":
-				msg := "username not available"
-				err = fmt.Errorf("%s: %v", msg, err)
-				app.respondWithError(w, r, http.StatusConflict, err, msg)
-			case "users_email_key":
-				msg := "email not available"
-				err = fmt.Errorf("%s: %v", msg, err)
-				app.respondWithError(w, r, http.StatusConflict, err, msg)
-			default:
-				msg := "something went wrong"
-				err = fmt.Errorf("%s: %v", msg, err)
-				app.respondWithError(w, r, http.StatusConflict, err, msg)
-			}
-			return
-		}
 		switch err {
-		case pgx.ErrNoRows:
-			app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
+		case storage.ErrUsernameUnavailable:
+			err = fmt.Errorf("%v, username: %s", err, newUser.User.Username)
+			app.respondWithError(w, r, http.StatusConflict, err, "username is not available")
+		case storage.ErrEmailUnavailable:
+			err = fmt.Errorf("%v, email: %s", err, newUser.User.Email)
+			app.respondWithError(w, r, http.StatusConflict, err, "email is not available")
 		default:
-			err := fmt.Errorf("user could not updated: %v", err)
+			err = fmt.Errorf("error during user creation: %v", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		}
 		return
 	}
-	newUser := models.DBUserToUser(newDBUser)
 
 	if app.Config.Cache.Enabled {
 		app.Cache.Users.Delete(r.Context(), user.Username)
 	}
 
-	app.respondWithJSON(w, r, http.StatusOK, newUser)
+	app.respondWithJSON(w, r, http.StatusOK, changedUser)
 }

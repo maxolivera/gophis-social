@@ -9,8 +9,8 @@ import (
 	"github.com/maxolivera/gophis-social-network/internal/api"
 	"github.com/maxolivera/gophis-social-network/internal/auth"
 	"github.com/maxolivera/gophis-social-network/internal/cache"
-	"github.com/maxolivera/gophis-social-network/internal/database"
 	"github.com/maxolivera/gophis-social-network/internal/env"
+	"github.com/maxolivera/gophis-social-network/internal/storage/postgres"
 	lru "github.com/maxolivera/gophis-social-network/pkg/lru"
 	"go.uber.org/zap"
 )
@@ -106,7 +106,7 @@ func main() {
 	}
 	cfg.Cache = cacheConfig
 
-	// == DATABASE ==
+	// == STORAGE / DATABASE ==
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -126,12 +126,12 @@ func main() {
 	defer pool.Close()
 	logger.Info("database connection pool established")
 
-	queries := database.New(pool)
+	storage := postgres.NewPostgresStorage(pool)
 
 	// == APPLICATION ==
 	app := &api.Application{
 		Config:        cfg,
-		Database:      queries,
+		Storage:       storage,
 		Cache:         cacheStorage,
 		Pool:          pool,
 		Logger:        logger,

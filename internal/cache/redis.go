@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/maxolivera/gophis-social-network/internal/models"
+	"github.com/maxolivera/gophis-social-network/internal/storage/models"
 	"github.com/redis/go-redis/v9"
 )
 

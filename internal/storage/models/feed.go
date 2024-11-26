@@ -18,10 +18,10 @@ type Feed struct {
 	CommentCount int64       `json:"comment_count"`
 }
 
-func DBFeedRowToFeed(row any) (Feed, error) {
+func DBFeedRowToFeed(row any) (*Feed, error) {
 	switch v := row.(type) {
 	case database.GetUserFeedRow:
-		return Feed{
+		return &Feed{
 			ID:           v.ID.Bytes,
 			Title:        v.Title,
 			CreatedAt:    v.CreatedAt.Time,
@@ -31,7 +31,7 @@ func DBFeedRowToFeed(row any) (Feed, error) {
 			CommentCount: v.CommentCount,
 		}, nil
 	case database.SearchPostsRow:
-		return Feed{
+		return &Feed{
 			ID:           v.ID.Bytes,
 			Title:        v.Title,
 			CreatedAt:    v.CreatedAt.Time,
@@ -41,13 +41,13 @@ func DBFeedRowToFeed(row any) (Feed, error) {
 			CommentCount: v.CommentCount,
 		}, nil
 	default:
-		return Feed{}, fmt.Errorf("unsupported row type: %T", v)
+		return &Feed{}, fmt.Errorf("unsupported row type: %T", v)
 	}
 
 }
 
-func DBFeedsToFeeds[S ~[]E, E any](s S) ([]Feed, error) {
-	feeds := make([]Feed, len(s))
+func DBFeedsToFeeds[S ~[]E, E any](s S) ([]*Feed, error) {
+	feeds := make([]*Feed, len(s))
 	for i, dbFeed := range s {
 		feed, err := DBFeedRowToFeed(dbFeed)
 		if err != nil {
