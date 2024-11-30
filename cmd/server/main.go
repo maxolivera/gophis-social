@@ -10,8 +10,10 @@ import (
 	"github.com/maxolivera/gophis-social-network/internal/auth"
 	"github.com/maxolivera/gophis-social-network/internal/cache"
 	"github.com/maxolivera/gophis-social-network/internal/env"
+	"github.com/maxolivera/gophis-social-network/internal/ratelimiter"
 	"github.com/maxolivera/gophis-social-network/internal/storage/postgres"
-	lru "github.com/maxolivera/gophis-social-network/pkg/lru"
+	fixedwindow "github.com/maxolivera/gophis-social-network/pkg/fixed-window"
+	"github.com/maxolivera/gophis-social-network/pkg/lru"
 	"go.uber.org/zap"
 )
 
@@ -41,6 +43,9 @@ func main() {
 	redisPass, err := env.GetString("REDIS_PASSWORD", logger)
 	redisDb, err := env.GetInt("REDIS_DB", logger)
 	secret, err := env.GetString("JWT_SECRET", logger)
+	requestsLimit, err := env.GetInt("REQUESTS_LIMIT", logger)
+	timeFrame, err := env.GetInt("TIME_FRAME", logger)
+	limiterEnabled, err := env.GetString("LIMITER_ENABLED", logger)
 
 	if err != nil {
 		logger.Fatalf("error loading env values: %v\n", err)
@@ -69,6 +74,11 @@ func main() {
 				ExpirationTime: 3 * 24 * time.Hour,
 				Issuer:         "gophissocial",
 			},
+		},
+		RateLimiter: &api.RateLimiterConfig{
+			Limit:     requestsLimit,
+			TimeFrame: time.Duration(timeFrame) * time.Second,
+			Enabled:   (limiterEnabled == "TRUE"),
 		},
 	}
 
@@ -128,6 +138,15 @@ func main() {
 
 	storage := postgres.NewPostgresStorage(pool)
 
+	// == RATE LIMITER ==
+	var rateLimiter ratelimiter.Limiter
+	if cfg.RateLimiter.Enabled {
+		rateLimiter = fixedwindow.NewFixedWindow(
+			cfg.RateLimiter.Limit,
+			cfg.RateLimiter.TimeFrame,
+		)
+	}
+
 	// == APPLICATION ==
 	app := &api.Application{
 		Config:        cfg,
@@ -136,6 +155,7 @@ func main() {
 		Pool:          pool,
 		Logger:        logger,
 		Authenticator: authenticator,
+		RateLimiter:   rateLimiter,
 	}
 
 	logger.Fatalln(app.Start())

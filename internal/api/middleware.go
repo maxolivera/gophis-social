@@ -23,6 +23,18 @@ const (
 	contextKeyLoggedUserRole = contextKey("loggedUserRole")
 )
 
+func (app *Application) middlewareRateLimiter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if app.Config.RateLimiter.Enabled {
+			if allow, retryAfter := app.RateLimiter.Allow(r.RemoteAddr); !allow {
+				app.rateLimiteExceededErrorResponse(w, r, retryAfter.String())
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (app *Application) middlewareAuthToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")

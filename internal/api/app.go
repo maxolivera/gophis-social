@@ -16,6 +16,7 @@ import (
 	"github.com/maxolivera/gophis-social-network/docs"
 	"github.com/maxolivera/gophis-social-network/internal/auth"
 	"github.com/maxolivera/gophis-social-network/internal/cache"
+	"github.com/maxolivera/gophis-social-network/internal/ratelimiter"
 	"github.com/maxolivera/gophis-social-network/internal/storage"
 	"github.com/maxolivera/gophis-social-network/internal/storage/models"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
@@ -29,6 +30,7 @@ type Application struct {
 	Cache         *cache.Storage
 	Logger        *zap.SugaredLogger
 	Authenticator auth.Authenticator
+	RateLimiter   ratelimiter.Limiter
 }
 
 type Config struct {
@@ -40,6 +42,13 @@ type Config struct {
 	ExpirationTime time.Duration
 	Authentication *AuthConfig
 	Cache          *CacheConfig
+	RateLimiter    *RateLimiterConfig
+}
+
+type RateLimiterConfig struct {
+	Limit     int
+	TimeFrame time.Duration
+	Enabled   bool
 }
 
 type CacheConfig struct {
@@ -143,6 +152,7 @@ func (app *Application) GetHandlers() http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(app.middlewareRateLimiter)
 
 	// timeout on request context
 	r.Use(middleware.Timeout(60 * time.Second))
@@ -154,7 +164,7 @@ func (app *Application) GetHandlers() http.Handler {
 	docs.SwaggerInfo.BasePath = "/v1"
 
 	r.Route("/v1", func(r chi.Router) {
-		r.With(app.middlewareBasicAuth).Get("/healthz", app.handlerHealthz)
+		r.Get("/healthz", app.handlerHealthz)
 		r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL(docsURL)))
 
 		// Non-auth routes

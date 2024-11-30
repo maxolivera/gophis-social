@@ -66,6 +66,8 @@ func (app *Application) respondWithError(w http.ResponseWriter, r *http.Request,
 		app.Logger.Errorw("there was an error", "http_code", code, "method", r.Method, "path", r.URL.Path, "error", err.Error())
 	case http.StatusForbidden:
 		app.Logger.Warnw("trying to access forbidden place", "http_code", code, "method", r.Method, "path", r.URL.Path, "error", err.Error())
+	case http.StatusTooManyRequests:
+		// Nothing as it is already logged
 	default:
 		app.Logger.Infow("responding with code > 4xx", "http_code", code, "method", r.Method, "path", r.URL.Path, "error", err.Error())
 	}
@@ -89,4 +91,12 @@ func (app *Application) unauthorizedBasicErrorResponse(w http.ResponseWriter, r 
 	w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 
 	app.respondWithError(w, r, http.StatusUnauthorized, err, "Unauthorized")
+}
+
+func (app *Application) rateLimiteExceededErrorResponse(w http.ResponseWriter, r *http.Request, retryAfter string) {
+	app.Logger.Warnw("rate limiter exceed", "method", r.Method, "path", r.URL.Path)
+
+	w.Header().Set("Retry-After", retryAfter)
+
+	app.respondWithError(w, r, http.StatusTooManyRequests, nil, "too many requests")
 }

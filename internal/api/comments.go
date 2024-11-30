@@ -60,7 +60,7 @@ func (app *Application) handlerCreateComment(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := app.Storage.Comments.Create(ctx, comment); err != nil {
-		err := fmt.Errorf("error during comment creation: ", err)
+		err := fmt.Errorf("error during comment creation: %v", err)
 		app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 		return
 	}
