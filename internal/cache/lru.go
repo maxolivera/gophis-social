@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/maxolivera/gophis-social-network/internal/storage/models"
-	lru "github.com/maxolivera/gophis-social-network/pkg/lru"
+	"github.com/maxolivera/gophis-social-network/pkg/lru"
 )
 
 func NewLRUStorage(c *lru.LRUCache) *Storage {
