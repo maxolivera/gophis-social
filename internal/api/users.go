@@ -56,7 +56,7 @@ func (app *Application) handlerCreateUser(w http.ResponseWriter, r *http.Request
 	{ // Validate input
 		// Empty input
 		if in.Username == "" || in.Email == "" || in.Password == "" {
-			err := fmt.Errorf("username, email, and password are required: %s\n", in)
+			err := fmt.Errorf("username, email, and password are required: %s", in)
 			app.respondWithError(w, r, http.StatusBadRequest, err, "username, email and password are required")
 			return
 		}
@@ -273,10 +273,10 @@ func (app *Application) handlerHardDeleteUser(w http.ResponseWriter, r *http.Req
 	if err := app.Storage.Users.HardDelete(ctx, user.ID); err != nil {
 		switch err {
 		case pgx.ErrNoRows:
-			err := fmt.Errorf("User not deleted. Not found, user id: %v error: %v", user.ID, err)
+			err := fmt.Errorf("user not deleted. Not found, user id: %v error: %v", user.ID, err)
 			app.respondWithError(w, r, http.StatusNotFound, err, "user not found")
 		default:
-			err := fmt.Errorf("User could not deleted: %v", err)
+			err := fmt.Errorf("user could not deleted: %v", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "user could not be deleted")
 		}
 		return

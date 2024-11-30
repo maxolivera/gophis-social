@@ -44,7 +44,7 @@ func (app *Application) handlerCreatePost(w http.ResponseWriter, r *http.Request
 
 	{ // Validate input
 		if in.Title == "" || in.Content == "" {
-			err := fmt.Errorf("title and content are required: %s\n", in)
+			err := fmt.Errorf("title and content are required: %s", in)
 			app.respondWithError(w, r, http.StatusBadRequest, err, "something is missing")
 			return
 		}

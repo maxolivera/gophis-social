@@ -18,6 +18,7 @@ import (
 type contextKey string
 
 const (
+	contextKeyPost           = contextKey("post")
 	contextKeyLoggedUser     = contextKey("loggedUser")
 	contextKeyRouteUser      = contextKey("routeUser")
 	contextKeyLoggedUserRole = contextKey("loggedUserRole")
@@ -178,7 +179,7 @@ func (app *Application) middlewarePostContext(next http.Handler) http.Handler {
 		}
 		post.Comments = comments
 
-		ctx = context.WithValue(ctx, "post", post)
+		ctx = context.WithValue(ctx, contextKeyPost, post)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -206,7 +207,7 @@ func (app *Application) middlewarePostPermissions(requiredRole models.RoleType, 
 
 		if user.Role.Level < role.Level {
 			// TODO(maolivera): Maybe add a field to the Application struct to keep the roles in memory?
-			err := fmt.Errorf("Role is not enough. Required '%s %d' vs '%s %d'", role.Name, role.Level, string(user.Role.Name), user.Role.Level)
+			err := fmt.Errorf("role is not enough. Required '%s %d' vs '%s %d'", role.Name, role.Level, string(user.Role.Name), user.Role.Level)
 			app.respondWithError(w, r, http.StatusForbidden, err, "forbidden")
 			return
 		}
@@ -224,7 +225,7 @@ func getLoggedUser(r *http.Request) *models.User {
 }
 
 func getPost(r *http.Request) *models.Post {
-	return r.Context().Value("post").(*models.Post)
+	return r.Context().Value(contextKeyPost).(*models.Post)
 }
 
 func (app *Application) getUser(r *http.Request, username string) (*models.User, error) {

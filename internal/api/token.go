@@ -48,7 +48,7 @@ func (app *Application) handlerCreateToken(w http.ResponseWriter, r *http.Reques
 	{ // Validate input
 		// Empty input
 		if in.Email == "" || in.Password == "" {
-			err := fmt.Errorf("email and password are required: %s\n", in)
+			err := fmt.Errorf("email and password are required: %s", in)
 			app.respondWithError(w, r, http.StatusBadRequest, err, "email and password are required")
 			return
 		}

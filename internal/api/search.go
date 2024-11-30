@@ -69,7 +69,7 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 	if sinceStr != "" {
 		sinceDate, err := time.Parse("2006-01-02", sinceStr)
 		if err != nil {
-			err = fmt.Errorf("could not parse date: %v\n", err)
+			err = fmt.Errorf("could not parse date: %v", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			return
 		}
@@ -80,7 +80,7 @@ func (app *Application) handlerSearch(w http.ResponseWriter, r *http.Request) {
 	if untilStr != "" {
 		untilDate, err := time.Parse("2006-01-02", untilStr)
 		if err != nil {
-			err = fmt.Errorf("could not parse date: %v\n", err)
+			err = fmt.Errorf("could not parse date: %v", err)
 			app.respondWithError(w, r, http.StatusInternalServerError, err, "")
 			return
 		}
