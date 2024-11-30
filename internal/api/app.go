@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"expvar"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/maxolivera/gophis-social-network/docs"
 	"github.com/maxolivera/gophis-social-network/internal/auth"
@@ -34,6 +36,7 @@ type Application struct {
 }
 
 type Config struct {
+	CorsAllowed    string
 	Addr           string
 	Database       *DBConfig
 	Environment    string
@@ -152,6 +155,15 @@ func (app *Application) GetHandlers() http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: []string{app.Config.ApiUrl}, // Use this to allow specific origin hosts
+		// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: false,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	}))
 	r.Use(app.middlewareRateLimiter)
 
 	// timeout on request context
@@ -164,8 +176,10 @@ func (app *Application) GetHandlers() http.Handler {
 	docs.SwaggerInfo.BasePath = "/v1"
 
 	r.Route("/v1", func(r chi.Router) {
+		// Operations
 		r.Get("/healthz", app.handlerHealthz)
 		r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL(docsURL)))
+		r.With(app.middlewareBasicAuth).Get("/debug/vars", expvar.Handler().ServeHTTP)
 
 		// Non-auth routes
 		r.Post("/register", app.handlerCreateUser)

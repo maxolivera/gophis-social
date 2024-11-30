@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"expvar"
+	"runtime"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,6 +48,7 @@ func main() {
 	requestsLimit, err := env.GetInt("REQUESTS_LIMIT", logger)
 	timeFrame, err := env.GetInt("TIME_FRAME", logger)
 	limiterEnabled, err := env.GetString("LIMITER_ENABLED", logger)
+	corsAllowed, err := env.GetString("CORS_ALLOWED_ORIGIN", logger)
 
 	if err != nil {
 		logger.Fatalf("error loading env values: %v\n", err)
@@ -54,6 +57,7 @@ func main() {
 	// == CONFIG ==
 	cfg := &api.Config{
 		Addr:        addr,
+		CorsAllowed: corsAllowed,
 		Environment: environment,
 		Version:     Version,
 		ApiUrl:      apiUrl,
@@ -134,6 +138,15 @@ func main() {
 		logger.Fatalf("could not create connection pool: %v\n", err)
 	}
 	defer pool.Close()
+	// Check connection
+	conn, err := pool.Acquire(context.Background())
+	if err != nil {
+		logger.Fatalf("failed to acquire connection from pool: %v", err)
+	}
+	defer conn.Release()
+	if err := conn.Conn().Ping(context.Background()); err != nil {
+		logger.Fatalf("failed to ping database: %v", err)
+	}
 	logger.Info("database connection pool established")
 
 	storage := postgres.NewPostgresStorage(pool)
@@ -157,6 +170,28 @@ func main() {
 		Authenticator: authenticator,
 		RateLimiter:   rateLimiter,
 	}
+
+	expvar.NewString("version").Set(cfg.Version)
+	expvar.Publish("database", expvar.Func(func() any {
+		stats := app.Pool.Stat()
+		return map[string]any{
+			"acquire_count":              stats.AcquireCount(),
+			"acquire_duration_ms":        stats.AcquireDuration().Milliseconds(),
+			"acquired_connections":       stats.AcquiredConns(),
+			"canceled_acquire_count":     stats.CanceledAcquireCount(),
+			"constructing_connections":   stats.ConstructingConns(),
+			"empty_acquire_count":        stats.EmptyAcquireCount(),
+			"idle_connections":           stats.IdleConns(),
+			"max_connections":            stats.MaxConns(),
+			"total_connections":          stats.TotalConns(),
+			"new_connections_count":      stats.NewConnsCount(),
+			"max_lifetime_destroy_count": stats.MaxLifetimeDestroyCount(),
+			"max_idle_destroy_count":     stats.MaxIdleDestroyCount(),
+		}
+	}))
+	expvar.Publish("goroutines", expvar.Func(func() any {
+		return runtime.NumGoroutine()
+	}))
 
 	logger.Fatalln(app.Start())
 }
